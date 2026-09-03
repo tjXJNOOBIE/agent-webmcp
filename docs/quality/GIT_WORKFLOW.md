@@ -10,6 +10,8 @@ This repository adopts the shared Tavall Studios workflow. The canonical Project
 
 GitHub is the authoritative record for review and active integration work. An open pull request is a durable work surface for its remote branch: implementation, review history, dependency relationships, validation, handoff, and reconciliation continue there until the scope is merged, superseded, or intentionally abandoned.
 
+For active runtime work, discovery follows an explicit source-of-truth order: **active GitHub PR/staging graph and exact remote branch heads → active DEVELOPMENT source snapshot/workspace → generated release/build copies**. Paths such as `/srv/AgentTaskManager/releases` are deployment/build outputs, not review or discovery authority, and may contain stale source or documentation. Never use a release copy as the first source for continuation or to override newer PR/staging/workspace evidence; when release content disagrees, record the drift and reconcile from the active integration source.
+
 There is no organization-wide open-PR cap and no global reconciliation freeze. Inspect relevant active work, then classify it as independent, dependent/stacked, overlapping, superseded, or same-scope. Reuse an existing same-scope PR instead of manufacturing `v2`, `replacement`, or `fixed` PRs.
 
 Ordinary contributor changes do not enter `main` without accountable GitHub review. Accountable review is either independent qualified human approval or an authorized owner posting a current **Owner Self-Review** for an owner-authored PR. AI/bot reviews and checks are advisory and do not substitute for either path. Reviewable changes invalidate stale approval/self-review.

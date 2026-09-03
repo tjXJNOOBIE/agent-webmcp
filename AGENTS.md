@@ -31,7 +31,8 @@ Inspect the existing implementation before proposing a replacement. Extend the o
 `docs/quality/GIT_WORKFLOW.md` is the shared Tavall Studios workflow and applies in full. In particular:
 
 - work normally continues on a focused `working/*` branch and its existing pull request;
-- GitHub is the authoritative review/work ledger;
+- GitHub is the authoritative review/work ledger; inspect the active PR/staging graph and exact remote branch heads before consulting release copies;
+- source-of-truth precedence for active runtime work is: GitHub PR/staging graph and exact branch heads, then the active DEVELOPMENT source snapshot/workspace, then generated release/build copies; `/srv/AgentTaskManager/releases` and similar release directories are never first-pass discovery authority and may contain stale documentation;
 - push coherent checkpoints rather than leaving useful source only in DEVELOPMENT workspaces;
 - keep pull requests Draft while implementation, validation, dependencies, or descriptions are incomplete;
 - preserve explicit stack ancestry instead of flattening dependent work;
