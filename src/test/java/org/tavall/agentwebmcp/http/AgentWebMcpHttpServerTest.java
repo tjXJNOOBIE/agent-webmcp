@@ -1,0 +1,80 @@
+package org.tavall.agentwebmcp.http;
+
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.tavall.agentwebmcp.AgentWebMcpRuntime;
+import org.tavall.agentwebmcp.support.FakeServiceProvider;
+
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.file.Path;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+class AgentWebMcpHttpServerTest {
+    @TempDir
+    Path dataDirectory;
+
+    @Test
+    void servesCatalogAndCanonicalExecution() throws Exception {
+        AgentWebMcpRuntime runtime = AgentWebMcpRuntime.builder()
+                .serviceProvider(new FakeServiceProvider())
+                .dataDirectory(dataDirectory)
+                .build();
+        try (AgentWebMcpHttpServer server = AgentWebMcpHttpServer.builder().runtime(runtime).port(0).build()) {
+            server.start();
+            HttpClient client = HttpClient.newHttpClient();
+            String base = "http://127.0.0.1:" + server.port();
+
+            HttpResponse<String> health = client.send(
+                    HttpRequest.newBuilder(URI.create(base + "/health")).GET().build(),
+                    HttpResponse.BodyHandlers.ofString()
+            );
+            assertEquals(200, health.statusCode());
+            assertTrue(health.body().contains("\"authMode\":\"NO_AUTH\""));
+            assertTrue(health.body().contains("\"operationCount\":16"));
+            assertTrue(health.body().contains("local-durable-jobs"));
+
+            HttpResponse<String> catalog = client.send(
+                    HttpRequest.newBuilder(URI.create(base + "/api/v1/operations")).GET().build(),
+                    HttpResponse.BodyHandlers.ofString()
+            );
+            assertEquals(200, catalog.statusCode());
+            assertTrue(catalog.body().contains("service.restart"));
+            assertTrue(catalog.body().contains("service.status"));
+            assertTrue(catalog.body().contains("metrics.snapshot"));
+            assertTrue(catalog.body().contains("job.execute"));
+
+            HttpResponse<String> execution = post(client, base, "system.status", "{}");
+            assertEquals(200, execution.statusCode());
+            assertTrue(execution.body().contains("\"status\":\"SUCCESS\""));
+            assertTrue(execution.body().contains("NO_AUTH"));
+
+            HttpResponse<String> metrics = post(client, base, "metrics.snapshot", "{}");
+            assertEquals(200, metrics.statusCode());
+            assertTrue(metrics.body().contains("availableProcessors"));
+
+            HttpResponse<String> recursive = post(
+                    client,
+                    base,
+                    "job.execute",
+                    "{\"operationId\":\"job.execute\",\"input\":{}}"
+            );
+            assertEquals(400, recursive.statusCode());
+            assertTrue(recursive.body().contains("RECURSIVE_JOB_EXECUTION"));
+        }
+    }
+
+    private static HttpResponse<String> post(HttpClient client, String base, String operationId, String body) throws Exception {
+        return client.send(
+                HttpRequest.newBuilder(URI.create(base + "/api/v1/operations/" + operationId))
+                        .header("content-type", "application/json")
+                        .POST(HttpRequest.BodyPublishers.ofString(body))
+                        .build(),
+                HttpResponse.BodyHandlers.ofString()
+        );
+    }
+}
