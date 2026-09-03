@@ -8,6 +8,7 @@ import com.sun.net.httpserver.HttpServer;
 import org.tavall.agentwebmcp.AgentWebMcpRuntime;
 import org.tavall.agentwebmcp.operation.OperationExecution;
 import org.tavall.agentwebmcp.operation.OperationExecutionStatus;
+import org.tavall.agentwebmcp.mcp.McpHttpHandler;
 import org.tavall.dependency.DependencyAccess;
 import org.tavall.internal.utils.concurrent.AsyncTask;
 
@@ -45,6 +46,7 @@ public final class AgentWebMcpHttpServer implements AutoCloseable, DependencyAcc
         server.setExecutor(command -> AsyncTask.runAsync(command));
         server.createContext("/health", this::health);
         server.createContext("/api/v1/operations", this::operations);
+        server.createContext("/mcp", new McpHttpHandler());
         server.createContext("/assets/agent-webmcp-webmcp.js", exchange -> staticResource(
                 exchange,
                 "/web/agent-webmcp-webmcp.js",

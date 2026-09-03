@@ -122,3 +122,64 @@ test('unknown operations are rejected instead of falling through to shell behavi
   const body = await response.json();
   expect(body.error.code).toBe('OPERATION_NOT_FOUND');
 });
+
+test('Streamable HTTP MCP exposes only the bounded ChatGPT operations', async ({ request }) => {
+  const initialize = await request.post('/mcp', {
+    headers: {
+      accept: 'application/json, text/event-stream',
+      'content-type': 'application/json',
+      'mcp-protocol-version': '2025-06-18'
+    },
+    data: {
+      jsonrpc: '2.0',
+      id: 'init-e2e',
+      method: 'initialize',
+      params: {
+        protocolVersion: '2025-06-18',
+        capabilities: {},
+        clientInfo: { name: 'agent-webmcp-e2e', version: '1' }
+      }
+    }
+  });
+  expect(initialize.ok()).toBeTruthy();
+  const sessionId = initialize.headers()['mcp-session-id'];
+  expect(sessionId).toBeTruthy();
+
+  const toolsResponse = await request.post('/mcp', {
+    headers: {
+      accept: 'application/json, text/event-stream',
+      'content-type': 'application/json',
+      'mcp-protocol-version': '2025-06-18',
+      'mcp-session-id': sessionId
+    },
+    data: { jsonrpc: '2.0', id: 'tools-e2e', method: 'tools/list', params: {} }
+  });
+  expect(toolsResponse.ok()).toBeTruthy();
+  const toolsBody = await toolsResponse.json();
+  const names = toolsBody.result.tools.map((tool) => tool.name);
+  expect(names).toHaveLength(10);
+  expect(names).toContain('system.status');
+  expect(names).toContain('service.logs');
+  expect(names).toContain('service.restart');
+  expect(names).not.toContain('job.execute');
+  expect(names).not.toContain('target.inspect');
+
+  const call = await request.post('/mcp', {
+    headers: {
+      accept: 'application/json, text/event-stream',
+      'content-type': 'application/json',
+      'mcp-protocol-version': '2025-06-18',
+      'mcp-session-id': sessionId
+    },
+    data: {
+      jsonrpc: '2.0',
+      id: 'call-e2e',
+      method: 'tools/call',
+      params: { name: 'system.status', arguments: {} }
+    }
+  });
+  expect(call.ok()).toBeTruthy();
+  const callBody = await call.json();
+  expect(callBody.result.isError).toBe(false);
+  expect(callBody.result.structuredContent.status).toBe('SUCCESS');
+});

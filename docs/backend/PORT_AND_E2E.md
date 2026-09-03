@@ -4,7 +4,7 @@ This branch is intentionally independent from the dashboard A/B/C design work.
 
 ## Runtime boundary
 
-Agent WebMCP is a lightweight Java runtime. The embedded web edge uses the JDK `jdk.httpserver` implementation rather than an application framework. HTTP is transport only: Tavall DI owns composition, Tavall Registry owns the canonical operation catalog, Tavall Concurrency owns generic async execution, and Tavall Logging owns runtime logging. CLI, HTTP and WebMCP all project the same `OperationCatalog` and `OperationExecutor`.
+Agent WebMCP is a lightweight Java runtime. The embedded web edge uses the JDK `jdk.httpserver` implementation rather than an application framework. HTTP is transport only: Tavall DI owns composition, Tavall Registry owns the canonical operation catalog, Tavall Concurrency owns generic async execution, and Tavall Logging owns runtime logging. CLI, HTTP, WebMCP, and MCP all project the same `OperationCatalog` and `OperationExecutor`. MCP applies a narrower exposure policy without owning replacement handlers.
 
 The first provider is the local Linux systemd provider. Commands are executed as validated argument vectors through `ProcessBuilder`; no shell command strings are accepted. Provider subprocesses are individually timed, force-terminated on timeout, and terminated when the invoking operation is interrupted.
 
@@ -37,7 +37,11 @@ Durable job persistence is separated from scheduling/execution behind `JobReposi
 
 ## Current evidence
 
-The Tavall quality migration has been compiled against actual public source snapshots of `tavall-di`, `tavall-concurrency`, and the Tavall Registry base API. The migrated runtime has passed 24 JUnit tests and 7 Playwright Chromium E2E tests. CLI projection has also returned all 16 operations and successful `system.status` execution.
+The Tavall quality migration has been compiled against actual public source snapshots of `tavall-di`, `tavall-concurrency`, and the Tavall Registry base API. The migrated runtime has passed 26 JUnit tests and 8 Playwright Chromium E2E tests. CLI projection has also returned all 16 operations and successful `system.status` execution. Streamable HTTP MCP initializes successfully, discovers exactly 10 bounded app-facing tools, and executes canonical operations through the same runtime.
+
+A clean-user install was also exercised from an assembled distribution into a fresh HOME. The installer generated the expected private config, the installed binary served health and MCP from its installed path, `verify-install.sh` completed initialize and `tools/list`, and the installed CLI reported 16 canonical operations with 10 MCP-exposed operations. The default systemd-user-service path was exercised with a sandboxed `systemctl` shim to verify `daemon-reload` and `enable --now` invocation without mutating the host user manager.
+
+OpenAI Secure MCP Tunnel itself is not end-to-end connected in this evidence because no tunnel ID/runtime API key is available in the repository or validation environment. ChatGPT write-action testing additionally depends on an eligible Business/Enterprise/Edu workspace.
 
 The canonical Gradle wrapper path is currently blocked in the Tavall host-local sandbox before project configuration because the Gradle single-use daemon cannot reconnect over sandbox loopback. Direct Java 25 compilation and repository-owned tests are used as bounded evidence until that sandbox/Gradle IPC limitation is repaired. Do not report `./gradlew check` as passing on this state.
 
@@ -45,4 +49,4 @@ The canonical Gradle wrapper path is currently blocked in the Tavall host-local 
 
 Repository-owned Playwright tests run against the real lightweight Java HTTP runtime on `http://127.0.0.1`. The WebMCP polyfill is used only by the test browser to provide the current `document.modelContext` contract when the installed browser does not expose native WebMCP. Production page code talks only to `document.modelContext`.
 
-The browser suite verifies the Java transport identity, catalog discovery, canonical WebMCP execution, durable job execution/inspection, metrics, recursive-job rejection, and unknown-operation rejection.
+The browser suite verifies the Java transport identity, catalog discovery, canonical WebMCP execution, durable job execution/inspection, metrics, recursive-job rejection, unknown-operation rejection, and a real MCP initialize/tools-list/tools-call flow with internal operations excluded.

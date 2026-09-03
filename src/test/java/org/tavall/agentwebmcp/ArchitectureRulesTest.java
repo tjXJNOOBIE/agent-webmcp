@@ -78,6 +78,13 @@ class ArchitectureRulesTest {
                 "HTTP dispatch must use Tavall Concurrency");
         assertTrue(server.contains("runtime().executor().execute"),
                 "HTTP execution must delegate to the canonical operation executor");
+        assertTrue(server.contains("new McpHttpHandler()"),
+                "HTTP edge must expose MCP through the dedicated protocol adapter");
+        String mcp = Files.readString(Path.of("src/main/java/org/tavall/agentwebmcp/mcp/McpHttpHandler.java"));
+        assertTrue(mcp.contains("runtime().executor().execute"),
+                "MCP tool calls must delegate to the canonical operation executor");
+        assertFalse(mcp.contains("ProcessBuilder"),
+                "MCP protocol code must not own process execution");
         for (String framework : List.of("spring-boot", "netty", "jetty", "undertow")) {
             assertFalse(build.contains(framework), () -> "Unexpected web framework dependency: " + framework);
         }

@@ -18,16 +18,16 @@ public final class AgentWebMcpApplication {
         AgentWebMcpRuntime runtime = AgentWebMcpRuntime.createDefault();
         String command = args.length == 0 ? "serve" : args[0];
         switch (command) {
-            case "serve" -> serve(runtime, Arrays.copyOfRange(args, 1, args.length));
+            case "serve" -> serve(Arrays.copyOfRange(args, 1, args.length));
             case "operations" -> printOperations(runtime);
             case "execute" -> execute(runtime, Arrays.copyOfRange(args, 1, args.length));
             default -> throw new IllegalArgumentException("Unknown command: " + command);
         }
     }
 
-    private static void serve(AgentWebMcpRuntime runtime, String[] args) throws InterruptedException {
-        String host = option(args, "--host", "127.0.0.1");
-        int port = Integer.parseInt(option(args, "--port", "7188"));
+    private static void serve(String[] args) throws InterruptedException {
+        String host = option(args, "--host", environment("AGENT_WEBMCP_HOST", "127.0.0.1"));
+        int port = Integer.parseInt(option(args, "--port", environment("AGENT_WEBMCP_PORT", "7188")));
         AgentWebMcpHttpServer server = AgentWebMcpHttpServer.builder()
                 .host(host)
                 .port(port)
@@ -61,6 +61,11 @@ public final class AgentWebMcpApplication {
         if (execution.error() != null) {
             System.exit(1);
         }
+    }
+
+    private static String environment(String name, String fallback) {
+        String value = System.getenv(name);
+        return value == null || value.isBlank() ? fallback : value;
     }
 
     private static String option(String[] args, String name, String fallback) {

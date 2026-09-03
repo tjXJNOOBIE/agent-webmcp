@@ -1,0 +1,39 @@
+{
+  "name": "agent-webmcp",
+  "version": "0.1.0",
+  "description": "Operate local services through the bounded Agent WebMCP health, logs, metrics, and lifecycle surface.",
+  "author": {
+    "name": "tjXJNOOBIE",
+    "url": "https://github.com/tjXJNOOBIE"
+  },
+  "homepage": "https://github.com/tjXJNOOBIE/agent-webmcp",
+  "repository": "https://github.com/tjXJNOOBIE/agent-webmcp",
+  "keywords": [
+    "mcp",
+    "operations",
+    "systemd",
+    "services",
+    "logs",
+    "health"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Agent WebMCP",
+    "shortDescription": "Inspect and control local services through MCP",
+    "longDescription": "Use Agent WebMCP to inspect system health and metrics, list and inspect services, read bounded cursor-based service logs, and start, stop, restart, or reload services through a constrained Java MCP runtime.",
+    "developerName": "tjXJNOOBIE",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/tjXJNOOBIE/agent-webmcp",
+    "defaultPrompt": [
+      "Show the current system and service health.",
+      "Show the latest logs for a service and explain any failures.",
+      "Restart a service and verify its observed state afterward."
+    ],
+    "screenshots": []
+  }
+}
