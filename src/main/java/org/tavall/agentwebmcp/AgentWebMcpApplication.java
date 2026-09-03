@@ -17,15 +17,23 @@ public final class AgentWebMcpApplication {
     public static void main(String[] args) throws Exception {
         AgentWebMcpRuntime runtime = AgentWebMcpRuntime.createDefault();
         String command = args.length == 0 ? "serve" : args[0];
-        switch (command) {
-            case "serve" -> serve(Arrays.copyOfRange(args, 1, args.length));
-            case "operations" -> printOperations(runtime);
-            case "execute" -> execute(runtime, Arrays.copyOfRange(args, 1, args.length));
-            default -> throw new IllegalArgumentException("Unknown command: " + command);
+        if ("serve".equals(command)) {
+            serve(runtime, Arrays.copyOfRange(args, 1, args.length));
+            return;
+        }
+        try (runtime) {
+            switch (command) {
+                case "operations" -> printOperations(runtime);
+                case "execute" -> execute(runtime, Arrays.copyOfRange(args, 1, args.length));
+                case "discover-services" -> discoverServices(runtime, Arrays.copyOfRange(args, 1, args.length));
+                default -> throw new IllegalArgumentException("Unknown command: " + command);
+            }
+        } finally {
+            AsyncTask.shutdown();
         }
     }
 
-    private static void serve(String[] args) throws InterruptedException {
+    private static void serve(AgentWebMcpRuntime runtime, String[] args) throws InterruptedException {
         String host = option(args, "--host", environment("AGENT_WEBMCP_HOST", "127.0.0.1"));
         int port = Integer.parseInt(option(args, "--port", environment("AGENT_WEBMCP_PORT", "7188")));
         AgentWebMcpHttpServer server = AgentWebMcpHttpServer.builder()
@@ -34,6 +42,7 @@ public final class AgentWebMcpApplication {
                 .build();
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             server.close();
+            runtime.close();
             AsyncTask.shutdown();
         }, "agent-webmcp-shutdown"));
         server.start();
@@ -55,10 +64,24 @@ public final class AgentWebMcpApplication {
         JsonNode input = args.length >= 2
                 ? runtime.objectMapper().readTree(args[1])
                 : JsonNodeFactory.instance.objectNode();
-        var execution = runtime.executor().execute(args[0], input);
+        writeExecution(runtime, runtime.executor().execute(args[0], input));
+    }
+
+    private static void discoverServices(AgentWebMcpRuntime runtime, String[] args) throws Exception {
+        boolean includeAi = Arrays.asList(args).contains("--ai");
+        for (String argument : args) {
+            if (!"--ai".equals(argument)) {
+                throw new IllegalArgumentException("Unknown discover-services option: " + argument);
+            }
+        }
+        var input = runtime.objectMapper().createObjectNode().put("includeAi", includeAi);
+        writeExecution(runtime, runtime.executor().execute("service.discover", input));
+    }
+
+    private static void writeExecution(AgentWebMcpRuntime runtime, Object execution) throws Exception {
         runtime.objectMapper().writerWithDefaultPrettyPrinter().writeValue(System.out, execution);
         System.out.println();
-        if (execution.error() != null) {
+        if (execution instanceof org.tavall.agentwebmcp.operation.OperationExecution result && result.error() != null) {
             System.exit(1);
         }
     }

@@ -8,3 +8,5 @@ playwright-report/
 *.iml
 
 .validation/
+.tavall-source-deps/
+.playwright-browsers/

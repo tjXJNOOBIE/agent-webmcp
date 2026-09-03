@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
+cd "$ROOT"
+export PLAYWRIGHT_BROWSERS_PATH="$ROOT/.playwright-browsers"
+
+bash scripts/quality-preflight.sh --print
+bash scripts/ci/prepare-tavall-sources
+node --check src/main/resources/web/dashboard.js
+node --check src/main/resources/web/agent-webmcp-webmcp.js
+./gradlew --no-daemon test --tests org.tavall.agentwebmcp.ArchitectureRulesTest
+./gradlew --no-daemon test installDist
+bash scripts/ci/verify-install-contract
+npm ci
+npx playwright install chromium
+npm run e2e:bundle
+npx playwright test e2e/runtime.spec.js
+AGENT_WEBMCP_PANEL_FIXTURE=true AGENT_WEBMCP_SERVER_COMMAND="./gradlew --no-daemon panelFixture" npx playwright test e2e/panel.spec.js
+sh scripts/verify-webmcp-challenge.sh
+git diff --check

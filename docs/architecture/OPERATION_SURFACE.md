@@ -2,13 +2,18 @@
 
 > **Status:** Active
 
-Agent WebMCP exposes one canonical typed Java operation surface. CLI, HTTP/JSON, WebMCP, MCP, and future operator clients project this same catalog and executor. Transport layers may adapt request/response representation, but they do not own service lifecycle, job scheduling, target discovery, metrics behavior, or independent copies of operation validation.
+Agent WebMCP owns one typed Java operation catalog. CLI, HTTP/JSON, WebMCP, MCP, and the Fleet Cockpit project the same `OperationCatalog` and execute through the same `OperationExecutor`. Transport code may adapt representation, but it must not duplicate lifecycle, discovery, job, target, metrics, or validation behavior.
 
 ## Ownership
 
-`OperationCatalog` is the domain registry and is built on Tavall Registry. `OperationExecutor` resolves managed dependencies through Tavall DI and invokes the registered stateless handler. Provider interfaces own external authority. Tavall Concurrency owns generic asynchronous execution.
+- Tavall DI owns runtime dependency composition and lifecycle-owned providers.
+- Tavall Registry owns the canonical operation registry.
+- Tavall Concurrency owns bounded asynchronous execution.
+- Tavall Scheduler owns future and recurring durable-job scheduling.
+- Tavall Logging owns runtime/application logging.
+- Provider interfaces own external authority such as systemd and the user's existing Codex CLI.
 
-The current operation IDs are:
+The catalog contains **21 operations**, **9 mutating**:
 
 - `system.status`
 - `metrics.snapshot`
@@ -17,9 +22,11 @@ The current operation IDs are:
 - `service.list`
 - `service.add`
 - `service.remove`
+- `service.discover`
 - `service.inspect`
 - `service.status`
 - `service.logs`
+- `service.diagnostics`
 - `service.start`
 - `service.stop`
 - `service.restart`
@@ -28,32 +35,41 @@ The current operation IDs are:
 - `job.inspect`
 - `job.logs`
 - `job.execute`
+- `job.cancel`
 
-New operations must have a stable ID, description, access classification, typed input schema, stateless handler, and typed output/error behavior. Surface-specific operation classes that reimplement an existing operation are forbidden.
+New operations require a stable ID, description, access classification, typed input, stateless handler, typed output/errors, and projection-policy tests. Surface-specific replacement handlers are forbidden.
 
-## Access
+## Projection policy
 
-Operations are classified as read-only or mutating in catalog metadata. WebMCP annotations and other projections derive that classification from the catalog rather than maintaining a second list.
+HTTP exposes the canonical operation endpoint. Machine-facing projections are intentionally narrower.
 
-## ChatGPT / MCP projection
+**WebMCP exposes 16 operations.** It includes bounded service inventory/observability/lifecycle plus read-only job state, but excludes `target.*`, `service.discover`, `job.execute`, and `job.cancel`. `WebMcpToolPolicy` is the explicit allowlist, and the browser registers a catalog operation only when its surfaces include `WEBMCP`.
 
-The canonical catalog remains larger than the public app surface. `McpToolPolicy` exposes 13 tools: system health/metrics, managed-service lifecycle/observability, and read-only durable job state. The job read projection is `job.list`, `job.inspect`, and `job.logs`; machine-side agents may create jobs internally with an optional `agentId`, but `job.execute` remains excluded from MCP.
+**MCP exposes 14 operations.** It includes health/metrics, managed-service observability/lifecycle including diagnostics, and read-only durable job state. It excludes `target.*`, `service.add`, `service.remove`, `service.discover`, `job.execute`, and `job.cancel`.
 
-`service.add` and `service.remove` are canonical panel/HTTP/WebMCP management operations but are excluded from ChatGPT MCP so the remote app cannot enlarge its own managed-service authority. `target.list`, `target.inspect`, and `job.execute` also remain internal. The MCP adapter must not expose generic shell execution, filesystem mutation, arbitrary process launch, or durable job submission. `service.logs` is bounded cursor-based near-live journal access, not an unbounded terminal stream.
+Discovery, job creation/cancellation, target mutation, generic shell execution, arbitrary process launch, and filesystem mutation are therefore not remotely projected by default merely because the canonical HTTP runtime can perform an operator workflow.
 
-The MCP layer is a projection policy and protocol adapter. It does not register replacement handlers or bypass `OperationExecutor`.
+## Managed services and discovery
 
-## Managed services
+`ManagedServiceRepository` is the authority boundary for service inspect/status/log/diagnostic/lifecycle operations. Guessing a provider unit ID cannot bypass enrollment: unenrolled IDs fail with `SERVICE_NOT_MANAGED` before provider mutation. `service.remove` removes only Agent WebMCP state; it does not stop, disable, delete, or rewrite the unit.
 
-The Fleet Cockpit uses a durable managed-service inventory. `service.add` validates that the provider can inspect the requested unit before persisting its service ID. `service.list` returns only enrolled services. `service.remove` only removes the ID from Agent WebMCP state and does not stop, disable, delete, or rewrite the underlying systemd unit.
-Enrollment is an authority boundary, not a display filter. Service inspect/status/log/lifecycle operations require the requested service ID to be present in `ManagedServiceRepository` and reject unenrolled IDs with `SERVICE_NOT_MANAGED` before invoking the provider. This prevents MCP-visible lifecycle operations from bypassing service enrollment. A stale enrolled service that the provider reports as not found remains in `service.list` as `UNKNOWN / not-found` until explicitly removed.
+`service.discover` performs deterministic discovery by listing provider services, re-inspecting each candidate, and accepting only operator/custom paths allowed by `ServiceDiscoveryPolicy` such as `/etc/systemd/system`, `/usr/local/lib/systemd/system`, and `/opt`. Obvious system/vendor services remain skipped.
 
-Lifecycle operations still act on the authoritative provider and return provider-observed state. A system-level installation therefore needs operating-system authority to perform systemd mutations; an ordinary user-service installation may be read-only depending on PolicyKit. The supported full-control installation mode is the explicit protected system service documented in the repository README.
+AI-assisted discovery is explicit opt-in only. It uses the user's already-installed Codex CLI in read-only sandbox mode with a strict structured result containing service IDs only. Every returned ID is re-inspected through the real provider; hallucinated or missing IDs are rejected. Agent WebMCP never installs Codex.
+
+## Service diagnostics
+
+`service.diagnostics` combines provider-observed service details with bounded recent logs and concrete findings. Non-running lifecycle state, impossible RUNNING-without-PID state, masked units, and log-read failures produce findings and make the result unhealthy. Diagnostics never invent synthetic health history.
 
 ## Durable jobs
 
-`job.execute` schedules an existing canonical operation. Jobs may carry an optional bounded `agentId` linking the durable record to the machine agent that created it. It is not a generic shell or process-execution escape hatch. Recursive `job.execute` is rejected. Durable job state is owned by `JobRepository`; the default file repository persists atomic JSON records and recovery metadata beneath the configured data directory.
+Jobs are service-bound workflows, not arbitrary catalog schedulers. A job chooses exactly one of:
+
+- deterministic `service.start`, `service.stop`, `service.restart`, or `service.reload`; or
+- one one-shot Codex prompt scoped to the selected managed service.
+
+A service is mandatory. Prompt and deterministic operation are mutually exclusive. Recurring AI jobs are rejected. Future and recurring deterministic jobs are durably recorded before Tavall Scheduler receives them. Cancellation is allowed for queued/scheduled jobs; a currently running job is not falsely reported cancelled. See [JOBS.md](JOBS.md).
 
 ## Validation
 
-At minimum, changes to the canonical surface require unit coverage for catalog/executor behavior plus HTTP, WebMCP, and MCP projection coverage when exposed through those transports. The MCP allowlist requires regression coverage proving internal operations remain undiscoverable and uncallable through the app surface.
+Catalog or projection changes require unit coverage plus transport/browser coverage for every affected edge. Current required invariants are 21 canonical operations, 9 mutating, 16 WebMCP, and 14 MCP. Validation must also prove hidden workflow operations remain undiscoverable through WebMCP/MCP.

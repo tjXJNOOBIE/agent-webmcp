@@ -1,0 +1,7 @@
+# name|repository|sha
+tavall-logging|https://github.com/TavallStudios/tavall-logging.git|02db5162187083307f471431870b06a9e21466d6
+tavall-di|https://github.com/TavallStudios/tavall-di.git|6e3ea2855a2112bad65ebecb136edfd3bf5b78e2
+tavall-cache|https://github.com/TavallStudios/tavall-cache.git|644fa982f913ce701a1b0573f862514a650b1b0c
+tavall-registry|https://github.com/TavallStudios/tavall-registry.git|ea5088dff829ab4b0f25c33eff0da740b3f44e32
+tavall-concurrency|https://github.com/TavallStudios/tavall-concurrency.git|3a74c8e484345b602bbc6e2f163ce94db9ae1e0b
+tavall-scheduler|https://github.com/TavallStudios/tavall-scheduler.git|2d6ff4bb71dc64980c02ca19c20f183d3b6d6cc4

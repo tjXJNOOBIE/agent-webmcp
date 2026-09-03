@@ -32,7 +32,7 @@ Browser / WebMCP / MCP / HTTP client
 - Tavall Registry owns the canonical operation registry.
 - Tavall Concurrency supplies HTTP dispatch and background operation execution.
 - Tavall Logging owns application/runtime logging.
-- Tavall Cache, Database, EventBus, Reflection, and Scheduler are adopted when Agent WebMCP actually owns those concerns.
+- Tavall Scheduler owns future and recurring durable-job timing; other Tavall tools are adopted only when Agent WebMCP actually owns those concerns.
 
 The HTTP transport must not introduce Spring, Netty, Jetty, Undertow, another DI container, or another executor framework merely to serve the current API. A richer server dependency is justified only by a concrete transport requirement the JDK server cannot responsibly satisfy, such as a future protocol/streaming need, and requires an explicit architecture change.
 
@@ -61,4 +61,4 @@ Default bind is `127.0.0.1`. `NO_AUTH` is intentionally supported only behind an
 
 ## Lifecycle
 
-`AgentWebMcpHttpServer` owns the JDK server lifecycle. The application shutdown hook closes the server and then shuts down Tavall Concurrency. The JDK server delegates request execution to Tavall Concurrency rather than allocating its own pool.
+`AgentWebMcpHttpServer` owns the JDK server lifecycle. The application shutdown hook closes the server and runtime-owned jobs/scheduler before Tavall Concurrency is shut down. The JDK server delegates request execution to Tavall Concurrency rather than allocating its own pool.

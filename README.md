@@ -12,7 +12,7 @@ Submission/implementation evidence, dated commit provenance, and judge verificat
 
 ## Current capabilities
 
-The canonical runtime now owns **18 operations**. The ChatGPT/MCP app exposes **13** of them: health/metrics, managed-service observability/lifecycle, and read-only agent-job state.
+The canonical runtime owns **21 operations / 9 mutating**. WebMCP exposes an explicit **16-tool** browser projection, while the narrower ChatGPT/MCP app exposes **14 tools** for health/metrics, managed-service observability/lifecycle, diagnostics, and read-only job state.
 
 | MCP tool | Purpose | Access |
 | --- | --- | --- |
@@ -22,6 +22,7 @@ The canonical runtime now owns **18 operations**. The ChatGPT/MCP app exposes **
 | `service.inspect` | Inspect one service in detail | Read |
 | `service.status` | Read current service state | Read |
 | `service.logs` | Read bounded cursor-based journal output | Read |
+| `service.diagnostics` | Run bounded provider-backed service diagnostics | Read |
 | `service.start` | Start a service | Write |
 | `service.stop` | Stop a service | Write |
 | `service.restart` | Restart a service | Write |
@@ -30,12 +31,11 @@ The canonical runtime now owns **18 operations**. The ChatGPT/MCP app exposes **
 | `job.inspect` | Inspect one job and its linked agent/result | Read |
 | `job.logs` | Read bounded job lifecycle logs | Read |
 
-The six operations that were previously kept off MCP were `target.list`, `target.inspect`, `job.list`, `job.inspect`, `job.logs`, and `job.execute`. This pass brings the three **job read** operations into MCP while keeping `job.execute` internal. Jobs can carry an optional `agentId`, so Codex/other machine agents can create durable jobs internally and the panel/ChatGPT can observe who owns them without gaining job-creation authority.
+The canonical catalog is intentionally larger than either machine-facing projection. WebMCP exposes 16 explicitly allowed operations. MCP is narrower at 14 tools: it includes `service.diagnostics`, service lifecycle/observability, system metrics/status, and read-only durable job state, while keeping discovery, job execution/cancellation, target workflows, and managed-inventory mutation outside the remote app surface.
 
-Two new canonical operations, `service.add` and `service.remove`, power the Fleet Cockpit's managed-service inventory. They are deliberately **panel/HTTP/WebMCP operations, not ChatGPT MCP tools**. Adding validates that an existing provider service exists and stores its ID in Agent WebMCP's durable inventory. Removing only unmanages it; it does not stop, disable, delete, or rewrite the systemd unit.
-The managed inventory is also the lifecycle authority boundary. `service.inspect`, `service.status`, `service.logs`, `service.start`, `service.stop`, `service.restart`, and `service.reload` reject unenrolled IDs with `SERVICE_NOT_MANAGED` before the systemd provider is invoked. An MCP client therefore cannot bypass the panel's enrollment scope by guessing a unit name. If a managed unit later disappears from systemd, it remains visible as `UNKNOWN / not-found` so an operator can remove the stale enrollment.
+Managed-service enrollment remains the lifecycle authority boundary. `service.inspect`, `service.status`, `service.logs`, `service.diagnostics`, `service.start`, `service.stop`, `service.restart`, and `service.reload` reject unenrolled IDs with `SERVICE_NOT_MANAGED` before provider access. `service.discover` can register deterministic custom/operator candidates; optional Codex-assisted discovery is explicit, read-only, accepts only service IDs, and re-inspects every returned ID through the real provider.
 
-`target.list`, `target.inspect`, `job.execute`, `service.add`, and `service.remove` therefore remain outside the ChatGPT MCP projection. There is no generic shell tool, arbitrary command operation, or MCP filesystem mutation surface.
+Jobs are service-bound. Deterministic jobs can run only `service.start`, `service.stop`, `service.restart`, or `service.reload`; one-shot AI jobs use the user's existing Codex CLI with a provider-owned service working directory. Recurring AI jobs are rejected. There is no generic shell tool, arbitrary browser-supplied working directory, or MCP filesystem/process escape hatch.
 
 `service.logs` is near-live through bounded repeated reads and cursors. It is not an unbounded interactive terminal stream.
 
@@ -43,8 +43,8 @@ The managed inventory is also the lifecycle authority boundary. `service.inspect
 
 ```mermaid
 flowchart TD
-    Add[Enter existing service ID + Add] --> AddOp[service.add]
-    AddOp --> Validate[Systemd provider validates unit]
+    Add[Discover Services] --> AddOp[service.discover]
+    AddOp --> Validate[Provider metadata + deterministic policy; optional explicit AI re-inspection]
     Validate --> Inventory[managed-services.txt]
     Inventory --> List[service.list renders managed services]
     List --> Select[Select service]
@@ -57,7 +57,7 @@ flowchart TD
     Select --> Remove[service.remove]
     Remove --> Inventory
     Remove --> Preserve[Systemd unit remains untouched]
-    Jobs[Machine agent creates internal job + agentId] --> JobRepo[JobRepository]
+    Jobs[Create service-bound deterministic or one-shot Codex job] --> JobRepo[JobRepository]
     JobRepo --> JobRead[job.list / inspect / logs]
     JobRead --> PanelJobs[Panel + ChatGPT read-only job state]
 ```
@@ -315,7 +315,7 @@ flowchart TD
     G --> H[tunnel-client doctor]
     H --> I[tunnel-client run]
     I --> J[Create ChatGPT custom app in Tunnel mode]
-    J --> K[Scan 13 tools]
+    J --> K[Scan 14 bounded MCP tools]
     K --> L[Test read-only health/log operations]
     L --> M[Test service lifecycle action on safe service]
     M --> N[Verify observed service state/logs]

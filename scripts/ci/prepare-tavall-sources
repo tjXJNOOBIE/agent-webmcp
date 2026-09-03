@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
+MANIFEST="$ROOT/scripts/ci/tavall-source-deps.tsv"
+DESTINATION="$ROOT/.tavall-source-deps"
+mkdir -p "$DESTINATION"
+
+while IFS='|' read -r name repository sha; do
+    [[ -z "${name:-}" ]] && continue
+    [[ "${name:0:1}" == "#" ]] && continue
+    target="$DESTINATION/$name"
+    if [[ ! -d "$target/.git" ]]; then
+        rm -rf "$target"
+        git clone --filter=blob:none --no-checkout "$repository" "$target"
+    fi
+    git -C "$target" remote set-url origin "$repository"
+    if ! git -C "$target" cat-file -e "$sha^{commit}" 2>/dev/null; then
+        git -C "$target" fetch --no-tags --depth=1 origin "$sha"
+    fi
+    git -C "$target" checkout --detach --force "$sha" >/dev/null
+    actual=$(git -C "$target" rev-parse HEAD)
+    if [[ "$actual" != "$sha" ]]; then
+        echo "Pinned Tavall source mismatch for $name: expected $sha, got $actual" >&2
+        exit 1
+    fi
+    printf 'TAVALL_SOURCE %s %s\n' "$name" "$actual"
+done < "$MANIFEST"

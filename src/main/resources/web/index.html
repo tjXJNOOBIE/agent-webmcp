@@ -7,65 +7,37 @@
   <link rel="stylesheet" href="/assets/agent-webmcp-dashboard.css">
 </head>
 <body>
-<div class="shell">
-  <header class="topbar">
-    <div class="brand"><span class="brandmark">AW</span><strong>Agent WebMCP</strong></div>
-    <div class="divider"></div>
-    <div class="context"><span class="dot good"></span><strong id="target-name">local</strong><span class="muted">/ fleet cockpit</span></div>
-    <div class="grow"></div>
-    <span class="badge danger"><span class="dot bad"></span>NO_AUTH</span>
-    <span class="badge good" id="connection-badge"><span class="dot good"></span>connecting</span>
-  </header>
-  <main class="layout">
-    <aside class="rail">
-      <div class="target-card"><span class="target-glyph">LOC</span><span><strong>local</strong><small id="target-meta">loading target…</small></span></div>
-      <span class="rail-label">Navigate</span>
-      <nav>
-        <button class="nav-row active"><span>◫</span><span>Services</span><em id="service-count-nav">0</em></button>
-        <button class="nav-row"><span>◎</span><span>Target status</span><em>1</em></button>
-        <button class="nav-row"><span>↯</span><span>Operations</span><em id="operation-count-nav">0</em></button>
-        <button class="nav-row"><span>▰</span><span>Jobs</span><em id="job-count-nav">0</em></button>
-      </nav>
-      <div class="rail-bottom"><span class="eyebrow">Browser surface</span><strong id="browser-tools">WebMCP loading</strong><small class="mono">document.modelContext</small></div>
-    </aside>
-    <section class="main">
-      <div class="page-head">
-        <div><span class="eyebrow">Selected target</span><h1>Fleet Cockpit</h1><p>Real service state, bounded logs, lifecycle controls and managed-service inventory.</p></div>
-        <button class="button" id="refresh-button">Refresh</button>
-      </div>
-      <div class="health-strip">
-        <div><strong id="healthy-count">0</strong><small>Managed services healthy</small></div>
-        <div><strong id="degraded-count">0</strong><small><span class="dot warn"></span>Degraded / failed</small></div>
-        <div><strong id="recent-job-count">0</strong><small>Recent agent jobs</small></div>
-        <div><strong id="operation-count">0</strong><small>Canonical operations</small></div>
-      </div>
-      <div class="section-head">
-        <div><strong>Managed services</strong><small>Add/remove changes Agent WebMCP inventory, never the systemd unit file.</small></div>
-        <div class="manage-row"><div class="input-wrap"><input id="service-add-id" placeholder="e2e-chatgpt-web.service" autocomplete="off"></div><button class="button primary" id="service-add-button">Add service</button></div>
-      </div>
-      <div class="service-table">
-        <div class="table-head"><span>Service</span><span>State</span><span>Substate</span><span>Description</span><span>Controls</span></div>
-        <div id="service-rows" class="service-rows"><div class="empty">No managed services yet. Add an existing systemd unit above.</div></div>
-      </div>
-      <section class="selected-card" id="selected-card" hidden>
-        <div class="selected-heading"><div><span class="eyebrow">Selected service</span><h2 id="selected-name">-</h2><p class="mono" id="selected-description">-</p></div><span class="badge" id="selected-state">unknown</span></div>
-        <div class="facts">
-          <div><span>PID</span><strong class="mono" id="selected-pid">0</strong></div><div><span>Memory</span><strong id="selected-memory">0 B</strong></div><div><span>CPU ns</span><strong class="mono" id="selected-cpu">0</strong></div><div><span>Provider</span><strong>systemd</strong></div>
-        </div>
-        <div class="actions"><button data-service-action="service.start">Start</button><button data-service-action="service.stop" class="danger-action">Stop</button><button data-service-action="service.restart">Restart</button><button data-service-action="service.reload">Reload</button><button id="logs-button">Logs</button><button id="remove-button" class="danger-action">Remove</button></div>
-        <div class="console-wrap" id="console-wrap" hidden><div class="console-head"><strong>Recent journal</strong><button id="logs-more-button">Read newer</button></div><pre id="service-console">No logs loaded.</pre></div>
-      </section>
-    </section>
-    <aside class="side">
-      <div class="security"><strong><span class="dot bad"></span>NO_AUTH is active</strong><p>Anyone reaching this endpoint can invoke exposed mutations. Keep it behind the trusted tunnel boundary.</p></div>
-      <div class="section-head compact"><div><strong>Agent jobs</strong><small>Read-only in MCP; machine agents create them.</small></div></div>
-      <div id="job-list" class="job-list"><div class="empty small-empty">No jobs yet.</div></div>
-      <div class="section-head compact catalog-head"><div><strong>MCP projection</strong><small>Internal execution stays canonical.</small></div><span id="mcp-tool-count">0 tools</span></div>
-      <div id="tool-list" class="tool-list"></div>
-    </aside>
-  </main>
+<header class="topbar">
+  <a class="brand" href="#services" aria-label="Agent WebMCP Fleet Cockpit"><span class="brandmark">AW</span><strong>Agent WebMCP</strong></a>
+  <span class="top-separator"></span>
+  <button class="target-context" id="target-switch-button" type="button" aria-haspopup="dialog"><span class="dot warn" id="target-health-dot"></span><strong id="target-name">local</strong><span id="target-meta">loading target</span><span aria-hidden="true">⌄</span></button>
+  <div class="grow"></div>
+  <span class="status-pill" id="webmcp-status"><span class="dot warn"></span>WebMCP loading</span>
+  <button class="status-pill danger interactive" id="security-button" type="button"><span class="dot bad"></span>NO_AUTH</button>
+</header>
+<div class="cockpit">
+  <aside class="fleet-rail">
+    <button class="target-switch" id="rail-target-switch" type="button" aria-haspopup="dialog"><span class="target-code mono" id="target-code">LOC</span><span><strong id="rail-target-name">local</strong><small id="rail-target-health">loading services</small></span><span aria-hidden="true">⌄</span></button>
+    <div class="rail-group"><span class="rail-label">Workspace</span><nav id="primary-nav">
+      <button class="nav-row active" data-page="services" type="button"><span>Services</span><em id="service-count-nav">0</em></button>
+      <button class="nav-row" data-page="operations" type="button"><span>Operations</span><em id="operation-count-nav">0</em></button>
+      <button class="nav-row" data-page="activity" type="button"><span>Activity</span><em id="activity-count-nav">0</em></button>
+      <button class="nav-row" data-page="catalog" type="button"><span>Catalog</span><em id="catalog-count-nav">0</em></button>
+      <button class="nav-row" data-page="agents" type="button"><span>Agents</span><em id="agent-count-nav">0</em></button>
+      <button class="nav-row" data-page="jobs" type="button"><span>Jobs</span><em id="job-count-nav">0</em></button>
+      <button class="nav-row" data-page="settings" type="button"><span>Settings</span><em>›</em></button>
+    </nav></div>
+    <div class="browser-surface"><span class="rail-label">Browser surface</span><strong class="mono">document.modelContext</strong><small id="browser-surface-count">discovering projection</small></div>
+  </aside>
+  <main class="workspace" id="page-root" aria-live="polite"><div class="loading-state"><span class="spinner"></span><strong>Loading Fleet Cockpit</strong><small>Reading canonical runtime state.</small></div></main>
+  <aside class="context-rail" id="context-rail">
+    <section class="security-note"><strong><i class="dot bad"></i>NO_AUTH is active</strong><p>Reachability grants access to exposed operations. Keep this endpoint behind the trusted local or private tunnel boundary you control.</p></section>
+    <section class="context-block"><span class="rail-label">Runtime</span><div class="fact-list" id="runtime-facts"><div><span>Status</span><strong>Loading…</strong></div></div></section>
+    <section class="context-block"><span class="rail-label">Recent jobs</span><div class="mini-job-list" id="side-job-list"><div class="empty compact">No jobs loaded.</div></div></section>
+  </aside>
 </div>
-<div class="toast" id="toast"></div>
+<div class="modal-backdrop" id="modal-backdrop" hidden><section class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"></section></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 <script src="/assets/agent-webmcp-dashboard.js"></script>
 <script src="/assets/agent-webmcp-webmcp.js"></script>
 </body>

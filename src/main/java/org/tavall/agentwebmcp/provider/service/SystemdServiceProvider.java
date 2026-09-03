@@ -69,7 +69,7 @@ public final class SystemdServiceProvider implements ServiceProvider, Dependency
         String validServiceId = requireServiceId(serviceId);
         CommandResult result = run(List.of(
                 "systemctl", "show", validServiceId, "--no-pager",
-                "--property=Id,Description,LoadState,ActiveState,SubState,MainPID,MemoryCurrent,CPUUsageNSec"
+                "--property=Id,Description,LoadState,ActiveState,SubState,MainPID,MemoryCurrent,CPUUsageNSec,FragmentPath,WorkingDirectory,UnitFileState"
         ));
         Map<String, String> properties = parseProperties(result.stdout());
         if (properties.getOrDefault("LoadState", "not-found").equals("not-found")) {

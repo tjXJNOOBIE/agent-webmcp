@@ -5,10 +5,13 @@ import java.util.Optional;
 
 public record JobSummary(
         String id,
+        String serviceId,
+        JobKind kind,
         String operationId,
         Optional<String> agentId,
         JobState state,
         Instant createdAt,
-        Instant completedAt
-) {
-}
+        Instant nextRunAt,
+        Instant completedAt,
+        Optional<Long> repeatEverySeconds
+) { }

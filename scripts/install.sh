@@ -78,6 +78,9 @@ if [ -z "$DIST" ]; then
     echo "Run this installer from the Agent WebMCP repository root." >&2
     exit 1
   fi
+  if [ -f ./scripts/ci/prepare-tavall-sources ]; then
+    bash ./scripts/ci/prepare-tavall-sources
+  fi
   ./gradlew --no-daemon installDist
   DIST="build/install/agent-webmcp"
 fi
@@ -98,6 +101,16 @@ AGENT_WEBMCP_PORT=$PORT
 AGENT_WEBMCP_DATA_DIR=$STATE_DIR
 ENV
 chmod 600 "$CONFIG_DIR/agent-webmcp.env"
+
+DISCOVERY_STATUS="skipped: systemctl unavailable"
+if command -v systemctl >/dev/null 2>&1; then
+  if AGENT_WEBMCP_DATA_DIR="$STATE_DIR" "$PREFIX/bin/agent-webmcp" discover-services; then
+    DISCOVERY_STATUS="completed (deterministic only)"
+  else
+    DISCOVERY_STATUS="attempted but provider discovery failed; use Discover Services after startup"
+    echo "Agent WebMCP deterministic service discovery could not complete during install; continuing without AI discovery." >&2
+  fi
+fi
 
 if [ "$SERVICE_MODE" != "none" ]; then
   if ! command -v systemctl >/dev/null 2>&1; then
@@ -163,6 +176,7 @@ Agent WebMCP installed.
   config:   $CONFIG_DIR/agent-webmcp.env
   data:     $STATE_DIR
   mode:     $SERVICE_MODE
+  discovery: $DISCOVERY_STATUS
   health:   http://$HOST:$PORT/health
   MCP:      http://$HOST:$PORT/mcp
 DONE

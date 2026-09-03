@@ -1,35 +1,39 @@
 package org.tavall.agentwebmcp.provider.job;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.tavall.agentwebmcp.operation.OperationExecution;
 import org.tavall.agentwebmcp.operation.OperationExecutionStatus;
 import org.tavall.agentwebmcp.operation.OperationInvoker;
+import org.tavall.agentwebmcp.provider.ProviderException;
+import org.tavall.agentwebmcp.provider.codex.CodexExecution;
+import org.tavall.agentwebmcp.provider.codex.CodexCliProvider;
+import org.tavall.agentwebmcp.provider.service.ServiceProvider;
 import org.tavall.dependency.IDependencyAccess;
 import org.tavall.dependency.annotations.DelegatesTo;
 import org.tavall.internal.utils.concurrent.AsyncTask;
+import org.tavall.scheduler.interfaces.ICustomScheduler;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.FutureTask;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.regex.Pattern;
 
 @DelegatesTo(JobProvider.class)
 public final class LocalJobProvider implements JobProvider, IDependencyAccess {
-    private static final Pattern JOB_ID = Pattern.compile("job-[a-f0-9]{12}");
-
-    private final AtomicBoolean recovered = new AtomicBoolean();
-    private final Object recoveryLock = new Object();
+    private final AtomicBoolean started = new AtomicBoolean();
+    private final AtomicBoolean closed = new AtomicBoolean();
+    private final Object stateLock = new Object();
+    private final ConcurrentHashMap<String, ScheduledFuture<?>> scheduled = new ConcurrentHashMap<>();
 
     @Override
     public String providerName() {
@@ -37,12 +41,47 @@ public final class LocalJobProvider implements JobProvider, IDependencyAccess {
     }
 
     @Override
+    public void start() {
+        if (!started.compareAndSet(false, true)) {
+            return;
+        }
+        synchronized (stateLock) {
+            for (JobRecord job : repository().list()) {
+                if (job.state() == JobState.RUNNING) {
+                    Instant now = Instant.now();
+                    repository().update(job.id(), current -> copy(
+                            current, JobState.FAILED, current.startedAt(), now, current.execution(), current.output(),
+                            "Runtime stopped before job completed",
+                            new JobLogEntry(now, "ERROR", "Recovered interrupted RUNNING job as failed"),
+                            current.nextRunAt()
+                    ));
+                } else if (job.state() == JobState.SCHEDULED || job.state() == JobState.QUEUED) {
+                    scheduleLocked(job);
+                }
+            }
+        }
+    }
+
+    @Override
+    public void close() {
+        if (!closed.compareAndSet(false, true)) {
+            return;
+        }
+        synchronized (stateLock) {
+            for (ScheduledFuture<?> future : scheduled.values()) {
+                scheduler().cancelTask(future);
+            }
+            scheduled.clear();
+        }
+    }
+
+    @Override
     public List<JobSummary> listJobs(int limit) {
         if (limit < 1 || limit > 1000) {
             throw new IllegalArgumentException("limit must be between 1 and 1000");
         }
-        ensureRecovered();
-        return jobRepository().list().stream()
+        ensureStarted();
+        return repository().list().stream()
                 .sorted(Comparator.comparing(JobRecord::createdAt).reversed())
                 .limit(limit)
                 .map(LocalJobProvider::summary)
@@ -51,8 +90,8 @@ public final class LocalJobProvider implements JobProvider, IDependencyAccess {
 
     @Override
     public JobDetails inspectJob(String jobId) {
-        ensureRecovered();
-        return details(jobRepository().read(requireJobId(jobId)));
+        ensureStarted();
+        return details(repository().read(jobId));
     }
 
     @Override
@@ -60,149 +99,253 @@ public final class LocalJobProvider implements JobProvider, IDependencyAccess {
         if (lines < 1 || lines > 1000) {
             throw new IllegalArgumentException("lines must be between 1 and 1000");
         }
-        ensureRecovered();
-        JobRecord job = jobRepository().read(requireJobId(jobId));
-        List<JobLogEntry> logs = job.logs();
-        int start = cursor.filter(value -> !value.isBlank())
-                .map(value -> parseCursor(value, logs.size()))
-                .orElse(Math.max(0, logs.size() - lines));
-        int end = Math.min(logs.size(), start + lines);
-        return new JobLogSlice(job.id(), List.copyOf(logs.subList(start, end)), Integer.toString(end), lines);
+        ensureStarted();
+        JobRecord job = repository().read(jobId);
+        int start = cursor == null ? Math.max(0, job.logs().size() - lines) : cursor
+                .filter(value -> !value.isBlank())
+                .map(value -> parseCursor(value, job.logs().size()))
+                .orElse(Math.max(0, job.logs().size() - lines));
+        int end = Math.min(job.logs().size(), start + lines);
+        return new JobLogSlice(job.id(), List.copyOf(job.logs().subList(start, end)), Integer.toString(end), lines);
     }
 
     @Override
-    public JobSubmission submit(String operationId, JsonNode input, Duration timeout, Optional<String> agentId, OperationInvoker operationInvoker) {
-        Objects.requireNonNull(operationInvoker, "operationInvoker");
-        if (operationId == null || operationId.isBlank()) {
-            throw new IllegalArgumentException("operationId is required");
+    public JobSubmission submit(JobRequest request) {
+        ensureStarted();
+        if (closed.get()) {
+            throw new ProviderException("JOB_PROVIDER_CLOSED", "Job provider is shutting down", 503);
         }
-        if (timeout == null || timeout.isZero() || timeout.isNegative() || timeout.compareTo(Duration.ofMinutes(15)) > 0) {
-            throw new IllegalArgumentException("timeout must be between 1 second and 15 minutes");
-        }
-        ensureRecovered();
-        Optional<String> resolvedAgentId = agentId == null ? Optional.empty() : agentId;
-
-        String jobId = "job-" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
+        String id = "job-" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
         Instant now = Instant.now();
-        JobRecord queued = new JobRecord(
-                jobId, operationId, resolvedAgentId, JobState.QUEUED, now, null, null, Math.toIntExact(timeout.toSeconds()),
-                input == null ? objectMapper().createObjectNode() : input.deepCopy(), null, null,
-                List.of(new JobLogEntry(now, "INFO", "Queued operation " + operationId))
+        Instant requested = request.runAt().orElse(now);
+        Instant nextRun = requested.isBefore(now) ? now : requested;
+        JobState state = nextRun.isAfter(now) ? JobState.SCHEDULED : JobState.QUEUED;
+        JobRecord job = new JobRecord(
+                id, request.targetId(), request.serviceId(), request.kind(), request.operationId(), request.prompt(), request.agentId(),
+                state, now, nextRun, nextRun, null, null, request.repeatEverySeconds(), request.timeoutSeconds(), request.input().deepCopy(),
+                null, "", "",
+                List.of(new JobLogEntry(now, "INFO", state == JobState.SCHEDULED ? "Scheduled job" : "Queued job"))
         );
-        jobRepository().write(queued);
-        AsyncTask.runAsync(() -> executeJob(jobId, operationInvoker));
-        return new JobSubmission(jobId, operationId, resolvedAgentId, JobState.QUEUED, queued.timeoutSeconds());
+        synchronized (stateLock) {
+            repository().write(job);
+            scheduleLocked(job);
+        }
+        return submission(job);
     }
 
-    private void executeJob(String jobId, OperationInvoker operationInvoker) {
-        JobRecord running = jobRepository().update(jobId, queued -> {
-            Instant now = Instant.now();
-            return transition(queued, JobState.RUNNING, now, null, null, null,
-                    new JobLogEntry(now, "INFO", "Executing operation with timeout " + queued.timeoutSeconds() + "s"));
-        });
+    @Override
+    public JobDetails cancel(String jobId) {
+        ensureStarted();
+        synchronized (stateLock) {
+            JobRecord current = repository().read(jobId);
+            if (current.state() == JobState.RUNNING) {
+                throw runningCancellationUnsupported();
+            }
+            if (terminal(current.state())) {
+                return details(current);
+            }
+            if (current.state() != JobState.SCHEDULED && current.state() != JobState.QUEUED) {
+                throw new ProviderException("JOB_NOT_CANCELLABLE", "Job is not in a cancellable state: " + current.state(), 409);
+            }
 
-        FutureTask<OperationExecution> future = new FutureTask<>(
-                () -> operationInvoker.execute(running.operationId(), running.input())
-        );
+            ScheduledFuture<?> future = scheduled.remove(jobId);
+            if (future != null) {
+                boolean cancelled = scheduler().cancelTask(future);
+                if (!cancelled) {
+                    scheduled.put(jobId, future);
+                    JobRecord observed = repository().read(jobId);
+                    if (observed.state() == JobState.RUNNING) {
+                        throw runningCancellationUnsupported();
+                    }
+                    if (terminal(observed.state())) {
+                        return details(observed);
+                    }
+                    throw new ProviderException("JOB_NOT_CANCELLABLE", "The scheduled task has already begun and cannot be cancelled safely", 409);
+                }
+            }
+
+            Instant now = Instant.now();
+            return details(repository().update(jobId, job -> copy(
+                    job, JobState.CANCELLED, job.startedAt(), now, job.execution(), job.output(), "Cancelled by operator",
+                    new JobLogEntry(now, "WARN", "Job cancelled before execution"), job.nextRunAt()
+            )));
+        }
+    }
+
+    private void scheduleLocked(JobRecord job) {
+        if (closed.get()) {
+            return;
+        }
+        long delayMillis = Math.max(0, Duration.between(Instant.now(), job.nextRunAt()).toMillis());
+        ScheduledFuture<?> future = scheduler().runTaskLaterAsync(() -> run(job.id()), delayMillis);
+        ScheduledFuture<?> replaced = scheduled.put(job.id(), future);
+        if (replaced != null && replaced != future) {
+            scheduler().cancelTask(replaced);
+        }
+    }
+
+    private void run(String jobId) {
+        JobRecord running;
+        synchronized (stateLock) {
+            ScheduledFuture<?> future = scheduled.remove(jobId);
+            if (future != null) {
+                scheduler().removeTask(future);
+            }
+            JobRecord current = repository().read(jobId);
+            if (current.state() != JobState.SCHEDULED && current.state() != JobState.QUEUED) {
+                return;
+            }
+            Instant now = Instant.now();
+            running = repository().update(jobId, job -> copy(
+                    job, JobState.RUNNING, now, null, job.execution(), job.output(), "",
+                    new JobLogEntry(now, "INFO", "Job execution started"), job.nextRunAt()
+            ));
+        }
+
+        RunOutcome outcome = executeBounded(running);
+        synchronized (stateLock) {
+            JobRecord current = repository().read(jobId);
+            if (current.state() != JobState.RUNNING) {
+                return;
+            }
+            completeRunLocked(current, outcome);
+        }
+    }
+
+    private RunOutcome executeBounded(JobRecord running) {
+        FutureTask<RunOutcome> future = new FutureTask<>(() -> invokeRun(running));
         Thread worker = AsyncTask.namingThreadFactory("agent-webmcp-job").newThread(future);
         worker.start();
         try {
-            OperationExecution execution = future.get(running.timeoutSeconds(), TimeUnit.SECONDS);
-            if (execution.status() == OperationExecutionStatus.SUCCESS) {
-                finish(jobId, JobState.SUCCEEDED, execution, null, "INFO");
-            } else {
-                String reason = execution.error() == null
-                        ? "Operation failed"
-                        : execution.error().code() + ": " + execution.error().message();
-                finish(jobId, JobState.FAILED, execution, reason, "ERROR");
-            }
+            return future.get(running.timeoutSeconds(), TimeUnit.SECONDS);
         } catch (TimeoutException exception) {
             future.cancel(true);
-            finish(jobId, JobState.TIMED_OUT, null, "Operation exceeded " + running.timeoutSeconds() + " second timeout", "ERROR");
+            return RunOutcome.timedOut("Execution exceeded " + running.timeoutSeconds() + " second timeout");
         } catch (InterruptedException exception) {
-            Thread.currentThread().interrupt();
             future.cancel(true);
-            finish(jobId, JobState.FAILED, null, "Job execution was interrupted", "ERROR");
+            Thread.currentThread().interrupt();
+            return RunOutcome.failed("Job execution was interrupted");
         } catch (ExecutionException exception) {
-            String message = exception.getCause() == null || exception.getCause().getMessage() == null
-                    ? "Operation execution failed"
-                    : exception.getCause().getMessage();
-            finish(jobId, JobState.FAILED, null, message, "ERROR");
+            Throwable cause = exception.getCause();
+            if (cause instanceof ProviderException providerException) {
+                if (providerException.code().contains("TIMEOUT")) {
+                    return RunOutcome.timedOut(providerException.code() + ": " + providerException.getMessage());
+                }
+                return RunOutcome.failed(providerException.code() + ": " + providerException.getMessage());
+            }
+            String message = cause == null || cause.getMessage() == null ? "Job execution failed" : cause.getMessage();
+            return RunOutcome.failed(message);
         }
     }
 
-    private void finish(String jobId, JobState state, OperationExecution execution, String failureReason, String level) {
-        jobRepository().update(jobId, current -> {
-            Instant now = Instant.now();
-            String message = switch (state) {
-                case SUCCEEDED -> "Operation completed successfully";
-                case TIMED_OUT -> failureReason;
-                case FAILED -> failureReason == null ? "Operation failed" : failureReason;
-                default -> state.name();
-            };
-            return transition(current, state, current.startedAt(), now, execution, failureReason,
-                    new JobLogEntry(now, level, message));
-        });
+    private RunOutcome invokeRun(JobRecord running) {
+        services().inspectService(running.serviceId());
+        if (running.kind() == JobKind.CODEX_PROMPT) {
+            CodexExecution codexExecution = codex().executeServicePrompt(
+                    services().inspectService(running.serviceId()),
+                    running.prompt().orElseThrow(),
+                    Duration.ofSeconds(running.timeoutSeconds())
+            );
+            return RunOutcome.succeeded(null, codexExecution.output());
+        }
+
+        ObjectNode input = running.input().deepCopy();
+        input.put("serviceId", running.serviceId());
+        if (!"local".equals(running.targetId())) {
+            input.put("targetId", running.targetId());
+        }
+        OperationExecution execution = invoker().execute(running.operationId(), input);
+        if (execution.status() != OperationExecutionStatus.SUCCESS) {
+            String reason = execution.error() == null
+                    ? "Operation failed"
+                    : execution.error().code() + ": " + execution.error().message();
+            return RunOutcome.failed(execution, reason);
+        }
+        return RunOutcome.succeeded(execution, "");
     }
 
-    private void ensureRecovered() {
-        if (recovered.get()) {
+    private void completeRunLocked(JobRecord current, RunOutcome outcome) {
+        Instant now = Instant.now();
+        if (current.repeatEverySeconds().isPresent()) {
+            long cadence = current.repeatEverySeconds().orElseThrow();
+            Instant next = nextCadence(current.nextRunAt(), cadence, now);
+            String message = outcome.success()
+                    ? "Run succeeded; next execution scheduled for " + next
+                    : (outcome.timedOut() ? "Run timed out; next execution scheduled for " : "Run failed; next execution scheduled for ") + next;
+            JobRecord rescheduled = repository().update(current.id(), job -> copy(
+                    job, JobState.SCHEDULED, job.startedAt(), now, outcome.execution(), outcome.output(), outcome.failureReason(),
+                    new JobLogEntry(now, outcome.success() ? "INFO" : "ERROR", message), next
+            ));
+            scheduleLocked(rescheduled);
             return;
         }
-        synchronized (recoveryLock) {
-            if (!recovered.compareAndSet(false, true)) {
-                return;
-            }
-            for (JobRecord job : jobRepository().list()) {
-                if (job.state() == JobState.QUEUED || job.state() == JobState.RUNNING) {
-                    jobRepository().update(job.id(), current -> {
-                        Instant now = Instant.now();
-                        return transition(current, JobState.FAILED, current.startedAt(), now, current.execution(),
-                                "Runtime stopped before job completed",
-                                new JobLogEntry(now, "ERROR", "Recovered interrupted job as failed"));
-                    });
-                }
-            }
+
+        JobState finalState = outcome.success() ? JobState.SUCCEEDED : outcome.timedOut() ? JobState.TIMED_OUT : JobState.FAILED;
+        String message = outcome.success() ? "Job succeeded" : outcome.failureReason();
+        repository().update(current.id(), job -> copy(
+                job, finalState, job.startedAt(), now, outcome.execution(), outcome.output(), outcome.failureReason(),
+                new JobLogEntry(now, outcome.success() ? "INFO" : "ERROR", message), job.nextRunAt()
+        ));
+    }
+
+    private void ensureStarted() {
+        if (!started.get()) {
+            start();
         }
     }
 
-    private ObjectMapper objectMapper() {
-        return getInstance(ObjectMapper.class);
+    private static Instant nextCadence(Instant previous, long cadenceSeconds, Instant now) {
+        Instant next = previous.plusSeconds(cadenceSeconds);
+        while (!next.isAfter(now)) {
+            next = next.plusSeconds(cadenceSeconds);
+        }
+        return next;
     }
 
-    private JobRepository jobRepository() {
-        return getInstance(JobRepository.class);
-    }
-
-    private static JobRecord transition(
+    private static JobRecord copy(
             JobRecord job,
             JobState state,
-            Instant startedAt,
-            Instant completedAt,
+            Instant started,
+            Instant completed,
             OperationExecution execution,
-            String failureReason,
-            JobLogEntry log
+            String output,
+            String failure,
+            JobLogEntry entry,
+            Instant nextRunAt
     ) {
         List<JobLogEntry> logs = new ArrayList<>(job.logs());
-        logs.add(log);
-        return new JobRecord(job.id(), job.operationId(), job.agentId(), state, job.createdAt(), startedAt, completedAt,
-                job.timeoutSeconds(), job.input(), execution, failureReason, List.copyOf(logs));
+        logs.add(entry);
+        return new JobRecord(
+                job.id(), job.targetId(), job.serviceId(), job.kind(), job.operationId(), job.prompt(), job.agentId(), state,
+                job.createdAt(), job.scheduledFor(), nextRunAt, started, completed, job.repeatEverySeconds(), job.timeoutSeconds(),
+                job.input(), execution, output, failure, List.copyOf(logs)
+        );
+    }
+
+    private static JobSubmission submission(JobRecord job) {
+        return new JobSubmission(
+                job.id(), job.serviceId(), job.kind(), job.operationId(), job.agentId(), job.state(), job.nextRunAt(),
+                job.repeatEverySeconds(), job.timeoutSeconds()
+        );
     }
 
     private static JobSummary summary(JobRecord job) {
-        return new JobSummary(job.id(), job.operationId(), job.agentId(), job.state(), job.createdAt(), job.completedAt());
+        return new JobSummary(
+                job.id(), job.serviceId(), job.kind(), job.operationId(), job.agentId(), job.state(), job.createdAt(),
+                job.nextRunAt(), job.completedAt(), job.repeatEverySeconds()
+        );
     }
 
     private static JobDetails details(JobRecord job) {
-        return new JobDetails(job.id(), job.operationId(), job.agentId(), job.state(), job.createdAt(), job.startedAt(), job.completedAt(),
-                job.timeoutSeconds(), job.input(), job.execution(), job.failureReason());
+        return new JobDetails(
+                job.id(), job.targetId(), job.serviceId(), job.kind(), job.operationId(), job.prompt(), job.agentId(), job.state(),
+                job.createdAt(), job.scheduledFor(), job.nextRunAt(), job.startedAt(), job.completedAt(), job.repeatEverySeconds(),
+                job.timeoutSeconds(), job.input(), job.execution(), job.output(), job.failureReason()
+        );
     }
 
-    private static String requireJobId(String jobId) {
-        if (jobId == null || !JOB_ID.matcher(jobId).matches()) {
-            throw new IllegalArgumentException("jobId is invalid");
-        }
-        return jobId;
+    private static boolean terminal(JobState state) {
+        return state == JobState.SUCCEEDED || state == JobState.FAILED || state == JobState.TIMED_OUT || state == JobState.CANCELLED;
     }
 
     private static int parseCursor(String value, int size) {
@@ -214,6 +357,40 @@ public final class LocalJobProvider implements JobProvider, IDependencyAccess {
             return cursor;
         } catch (NumberFormatException exception) {
             throw new IllegalArgumentException("cursor must be a numeric job log offset");
+        }
+    }
+
+    private static ProviderException runningCancellationUnsupported() {
+        return new ProviderException("JOB_NOT_CANCELLABLE", "Running jobs cannot be cancelled safely because Agent WebMCP does not expose an owned cancellable process handle for the complete operation", 409);
+    }
+
+    private JobRepository repository() { return getInstance(JobRepository.class); }
+    private ICustomScheduler scheduler() { return getInstance(ICustomScheduler.class); }
+    private CodexCliProvider codex() { return getInstance(CodexCliProvider.class); }
+    private ServiceProvider services() { return getInstance(ServiceProvider.class); }
+    private OperationInvoker invoker() { return getInstance(OperationInvoker.class); }
+
+    private record RunOutcome(
+            boolean success,
+            boolean timedOut,
+            OperationExecution execution,
+            String output,
+            String failureReason
+    ) {
+        private static RunOutcome succeeded(OperationExecution execution, String output) {
+            return new RunOutcome(true, false, execution, output == null ? "" : output, "");
+        }
+
+        private static RunOutcome failed(String reason) {
+            return failed(null, reason);
+        }
+
+        private static RunOutcome failed(OperationExecution execution, String reason) {
+            return new RunOutcome(false, false, execution, "", reason == null ? "Job execution failed" : reason);
+        }
+
+        private static RunOutcome timedOut(String reason) {
+            return new RunOutcome(false, true, null, "", reason);
         }
     }
 }

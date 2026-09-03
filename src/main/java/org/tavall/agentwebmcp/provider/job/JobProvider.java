@@ -1,20 +1,20 @@
 package org.tavall.agentwebmcp.provider.job;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import org.tavall.agentwebmcp.operation.OperationInvoker;
-
-import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 
-public interface JobProvider {
+public interface JobProvider extends AutoCloseable {
     String providerName();
-
     List<JobSummary> listJobs(int limit);
-
     JobDetails inspectJob(String jobId);
-
     JobLogSlice readLogs(String jobId, int lines, Optional<String> cursor);
+    JobSubmission submit(JobRequest request);
+    JobDetails cancel(String jobId);
 
-    JobSubmission submit(String operationId, JsonNode input, Duration timeout, Optional<String> agentId, OperationInvoker operationInvoker);
+    default void start() {
+    }
+
+    @Override
+    default void close() {
+    }
 }

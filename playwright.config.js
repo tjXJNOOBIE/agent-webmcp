@@ -2,6 +2,8 @@ import { defineConfig } from '@playwright/test';
 import fs from 'node:fs';
 import path from 'node:path';
 
+const browserCache = process.env.PLAYWRIGHT_BROWSERS_PATH ?? path.resolve('.playwright-browsers');
+process.env.PLAYWRIGHT_BROWSERS_PATH = browserCache;
 const dist = process.env.AGENT_WEBMCP_DIST ?? path.resolve('build/install/agent-webmcp');
 const executable = process.platform === 'win32'
   ? path.join(dist, 'bin', 'agent-webmcp.bat')

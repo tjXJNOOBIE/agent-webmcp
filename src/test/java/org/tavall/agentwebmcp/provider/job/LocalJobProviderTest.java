@@ -1,134 +1,232 @@
 package org.tavall.agentwebmcp.provider.job;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.tavall.agentwebmcp.AgentWebMcpRuntime;
 import org.tavall.agentwebmcp.operation.OperationExecution;
 import org.tavall.agentwebmcp.operation.OperationExecutionStatus;
-import org.tavall.dependency.maps.DependencyMap;
+import org.tavall.agentwebmcp.provider.ProviderException;
+import org.tavall.agentwebmcp.support.FakeCodexCliProvider;
+import org.tavall.agentwebmcp.support.FakeServiceProvider;
+import org.tavall.scheduler.interfaces.ICustomScheduler;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.Delayed;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 class LocalJobProviderTest {
-    @TempDir
-    Path dataDirectory;
-
-    private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
+    @TempDir Path dataDirectory;
 
     @Test
-    void persistsCanonicalExecutionAndCursorBasedLogs() throws Exception {
-        LocalJobProvider provider = provider();
-        JobSubmission submission = provider.submit(
-                "system.status",
-                objectMapper.createObjectNode().put("probe", true),
-                Duration.ofSeconds(2),
-                Optional.of("codex:test-agent"),
-                (operationId, input) -> success(operationId, input)
-        );
-
-        JobDetails completed = awaitTerminal(provider, submission.jobId());
-        assertEquals(JobState.SUCCEEDED, completed.state());
-        assertEquals("system.status", completed.operationId());
-        assertEquals(Optional.of("codex:test-agent"), completed.agentId());
-        assertEquals("system.status", completed.execution().operationId());
-        assertTrue(Files.isRegularFile(dataDirectory.resolve("jobs").resolve(submission.jobId() + ".json")));
-
-        JobLogSlice first = provider.readLogs(submission.jobId(), 1, Optional.of("0"));
-        assertEquals(1, first.entries().size());
-        JobLogSlice continuation = provider.readLogs(submission.jobId(), 100, Optional.of(first.cursor()));
-        assertFalse(continuation.entries().isEmpty());
-
-        LocalJobProvider reloaded = provider();
-        JobDetails durable = reloaded.inspectJob(submission.jobId());
-        assertEquals(JobState.SUCCEEDED, durable.state());
-        assertNotNull(durable.execution());
+    void executesImmediateDeterministicServiceJobAndPersistsLogs() throws Exception {
+        FakeServiceProvider services = new FakeServiceProvider();
+        String jobId;
+        try (AgentWebMcpRuntime runtime = runtime(services, new FakeCodexCliProvider(), null)) {
+            enroll(runtime);
+            OperationExecution submission = executeJob(runtime, "{\"serviceId\":\"demo.service\",\"operationId\":\"service.restart\",\"input\":{},\"timeoutSeconds\":5,\"agentId\":\"agent:test\"}");
+            assertEquals(OperationExecutionStatus.SUCCESS, submission.status());
+            jobId = submission.output().path("jobId").asText();
+            JobDetails completed = awaitTerminal(runtime.context().jobProvider(), jobId);
+            assertEquals(JobState.SUCCEEDED, completed.state());
+            assertEquals("service.restart", completed.operationId());
+            assertEquals("demo.service", completed.serviceId());
+            assertEquals(Optional.of("agent:test"), completed.agentId());
+            assertEquals("restart", services.lastAction());
+            assertTrue(Files.isRegularFile(dataDirectory.resolve("jobs").resolve(jobId + ".json")));
+            JobLogSlice logs = runtime.context().jobProvider().readLogs(jobId, 100, Optional.of("0"));
+            assertTrue(logs.entries().stream().anyMatch(entry -> entry.message().contains("started")));
+            assertTrue(logs.entries().stream().anyMatch(entry -> entry.message().contains("succeeded")));
+        }
+        try (AgentWebMcpRuntime reloaded = runtime(services, new FakeCodexCliProvider(), null)) {
+            assertEquals(JobState.SUCCEEDED, reloaded.context().jobProvider().inspectJob(jobId).state());
+        }
     }
 
     @Test
-    void recoversInterruptedPersistedJobAsFailed() throws Exception {
-        Path jobs = Files.createDirectories(dataDirectory.resolve("jobs"));
+    void executesOneShotCodexPromptAsServiceBoundJob() throws Exception {
+        FakeCodexCliProvider codex = new FakeCodexCliProvider();
+        codex.setOutput("inspection complete");
+        try (AgentWebMcpRuntime runtime = runtime(new FakeServiceProvider(), codex, null)) {
+            enroll(runtime);
+            OperationExecution submission = executeJob(runtime, "{\"serviceId\":\"demo.service\",\"prompt\":\"inspect only this service\",\"input\":{},\"timeoutSeconds\":5}");
+            JobDetails completed = awaitTerminal(runtime.context().jobProvider(), submission.output().path("jobId").asText());
+            assertEquals(JobState.SUCCEEDED, completed.state());
+            assertEquals(JobKind.CODEX_PROMPT, completed.kind());
+            assertEquals("inspection complete", completed.output());
+            assertEquals("demo.service", codex.lastServiceId());
+        }
+    }
+
+    @Test
+    void futureJobSurvivesRuntimeRestartAndExecutes() throws Exception {
+        FakeServiceProvider services = new FakeServiceProvider();
+        String jobId;
+        Instant runAt = Instant.now().plusMillis(700);
+        AgentWebMcpRuntime first = runtime(services, new FakeCodexCliProvider(), null);
+        enroll(first);
+        OperationExecution submission = executeJob(first, "{\"serviceId\":\"demo.service\",\"operationId\":\"service.restart\",\"input\":{},\"runAt\":\"" + runAt + "\",\"timeoutSeconds\":5}");
+        jobId = submission.output().path("jobId").asText();
+        assertEquals(JobState.SCHEDULED, first.context().jobProvider().inspectJob(jobId).state());
+        first.close();
+
+        try (AgentWebMcpRuntime recovered = runtime(services, new FakeCodexCliProvider(), null)) {
+            JobDetails completed = awaitTerminal(recovered.context().jobProvider(), jobId);
+            assertEquals(JobState.SUCCEEDED, completed.state());
+            assertEquals("restart", services.lastAction());
+        }
+    }
+
+    @Test
+    void recurringDeterministicJobReschedulesAfterSuccessfulRun() throws Exception {
+        FakeServiceProvider services = new FakeServiceProvider();
+        try (AgentWebMcpRuntime runtime = runtime(services, new FakeCodexCliProvider(), null)) {
+            enroll(runtime);
+            JobSubmission submission = runtime.context().jobProvider().submit(new JobRequest(
+                    "local", "demo.service", JobKind.SERVICE_OPERATION, "service.restart",
+                    JsonNodeFactory.instance.objectNode(), Optional.empty(), Optional.empty(), Optional.of(1L), 5, Optional.empty()));
+            JobDetails rescheduled = awaitRescheduled(runtime.context().jobProvider(), submission.jobId());
+            assertEquals(JobState.SCHEDULED, rescheduled.state());
+            assertEquals(Optional.of(1L), rescheduled.repeatEverySeconds());
+            assertNotNull(rescheduled.startedAt());
+            assertTrue(runtime.context().jobProvider().readLogs(submission.jobId(), 100, Optional.of("0")).entries().stream()
+                    .anyMatch(entry -> entry.message().contains("next execution scheduled")));
+            assertEquals(JobState.CANCELLED, runtime.context().jobProvider().cancel(submission.jobId()).state());
+        }
+    }
+
+    @Test
+    void recoversInterruptedRunningRecordAsFailed() {
+        FakeServiceProvider services = new FakeServiceProvider();
         String jobId = "job-0123456789ab";
-        Instant createdAt = Instant.now().minusSeconds(10);
-        Instant startedAt = Instant.now().minusSeconds(9);
-        String persisted = """
-                {
-                  "id": "%s",
-                  "operationId": "system.status",
-                  "state": "RUNNING",
-                  "createdAt": "%s",
-                  "startedAt": "%s",
-                  "completedAt": null,
-                  "timeoutSeconds": 60,
-                  "input": {},
-                  "execution": null,
-                  "failureReason": null,
-                  "logs": []
-                }
-                """.formatted(jobId, createdAt, startedAt);
-        Files.writeString(jobs.resolve(jobId + ".json"), persisted);
+        AgentWebMcpRuntime first = runtime(services, new FakeCodexCliProvider(), null);
+        Instant created = Instant.now().minusSeconds(10);
+        JobRepository repository = first.dependencyMap().getInstance(JobRepository.class);
+        repository.write(new JobRecord(
+                jobId, "local", "demo.service", JobKind.SERVICE_OPERATION, "service.restart", Optional.empty(), Optional.empty(),
+                JobState.RUNNING, created, created, created, created.plusSeconds(1), null, Optional.empty(), 60,
+                JsonNodeFactory.instance.objectNode(), null, "", "", List.of()));
+        first.close();
 
-        JobDetails recovered = provider().inspectJob(jobId);
-
-        assertEquals(JobState.FAILED, recovered.state());
-        assertNotNull(recovered.completedAt());
-        assertEquals("Runtime stopped before job completed", recovered.failureReason());
-        JobLogSlice logs = provider().readLogs(jobId, 10, Optional.of("0"));
-        assertTrue(logs.entries().stream().anyMatch(entry -> entry.message().contains("Recovered interrupted job")));
+        try (AgentWebMcpRuntime recovered = runtime(services, new FakeCodexCliProvider(), null)) {
+            JobDetails details = recovered.context().jobProvider().inspectJob(jobId);
+            assertEquals(JobState.FAILED, details.state());
+            assertEquals("Runtime stopped before job completed", details.failureReason());
+            assertTrue(recovered.context().jobProvider().readLogs(jobId, 20, Optional.of("0")).entries().stream()
+                    .anyMatch(entry -> entry.message().contains("Recovered interrupted RUNNING job")));
+        }
     }
 
     @Test
-    void timesOutBoundedExecution() throws Exception {
-        LocalJobProvider provider = provider();
-        JobSubmission submission = provider.submit(
-                "slow.operation",
-                objectMapper.createObjectNode(),
-                Duration.ofSeconds(1),
-                Optional.empty(),
-                (operationId, input) -> {
-                    try {
-                        Thread.sleep(Duration.ofSeconds(10));
-                    } catch (InterruptedException exception) {
-                        Thread.currentThread().interrupt();
-                    }
-                    return success(operationId, input);
-                }
-        );
-
-        JobDetails completed = awaitTerminal(provider, submission.jobId());
-        assertEquals(JobState.TIMED_OUT, completed.state());
-        assertTrue(completed.failureReason().contains("timeout"));
+    void cancelsQueuedAndScheduledJobsBeforeExecution() {
+        HoldingScheduler scheduler = new HoldingScheduler();
+        try (AgentWebMcpRuntime runtime = runtime(new FakeServiceProvider(), new FakeCodexCliProvider(), scheduler)) {
+            JobProvider jobs = runtime.context().jobProvider();
+            JobSubmission queued = jobs.submit(request(Optional.empty(), Optional.empty(), 5));
+            JobSubmission scheduled = jobs.submit(request(Optional.of(Instant.now().plusSeconds(60)), Optional.empty(), 5));
+            assertEquals(JobState.QUEUED, jobs.inspectJob(queued.jobId()).state());
+            assertEquals(JobState.SCHEDULED, jobs.inspectJob(scheduled.jobId()).state());
+            assertEquals(JobState.CANCELLED, jobs.cancel(queued.jobId()).state());
+            assertEquals(JobState.CANCELLED, jobs.cancel(scheduled.jobId()).state());
+        }
     }
 
-    private LocalJobProvider provider() {
-        DependencyMap dependencies = DependencyMap.getDependencyMap();
-        dependencies.registerInstance(ObjectMapper.class, objectMapper);
-        JobRepository repository = FileJobRepository.builder().dataDirectory(dataDirectory).build();
-        dependencies.registerInstance(JobRepository.class, repository);
-        return new LocalJobProvider();
+    @Test
+    void refusesToLieAboutCancellationOnceJobIsRunning() throws Exception {
+        FakeServiceProvider services = new FakeServiceProvider();
+        services.setLifecycleDelayMillis(700);
+        try (AgentWebMcpRuntime runtime = runtime(services, new FakeCodexCliProvider(), null)) {
+            enroll(runtime);
+            OperationExecution submission = executeJob(runtime, "{\"serviceId\":\"demo.service\",\"operationId\":\"service.restart\",\"input\":{},\"timeoutSeconds\":5}");
+            String jobId = submission.output().path("jobId").asText();
+            awaitState(runtime.context().jobProvider(), jobId, JobState.RUNNING);
+            ProviderException refusal = assertThrows(ProviderException.class, () -> runtime.context().jobProvider().cancel(jobId));
+            assertEquals("JOB_NOT_CANCELLABLE", refusal.code());
+            assertEquals(JobState.SUCCEEDED, awaitTerminal(runtime.context().jobProvider(), jobId).state());
+        }
     }
 
-    private static JobDetails awaitTerminal(LocalJobProvider provider, String jobId) throws Exception {
-        for (int attempt = 0; attempt < 120; attempt++) {
+    @Test
+    void timesOutAndInterruptsBoundedServiceExecution() throws Exception {
+        FakeServiceProvider services = new FakeServiceProvider();
+        services.setLifecycleDelayMillis(5_000);
+        try (AgentWebMcpRuntime runtime = runtime(services, new FakeCodexCliProvider(), null)) {
+            enroll(runtime);
+            OperationExecution submission = executeJob(runtime, "{\"serviceId\":\"demo.service\",\"operationId\":\"service.restart\",\"input\":{},\"timeoutSeconds\":1}");
+            JobDetails completed = awaitTerminal(runtime.context().jobProvider(), submission.output().path("jobId").asText());
+            assertEquals(JobState.TIMED_OUT, completed.state());
+            assertTrue(completed.failureReason().contains("timeout"));
+        }
+    }
+
+    private AgentWebMcpRuntime runtime(FakeServiceProvider services, FakeCodexCliProvider codex, ICustomScheduler scheduler) {
+        AgentWebMcpRuntime.Builder builder = AgentWebMcpRuntime.builder().serviceProvider(services).codexCliProvider(codex).dataDirectory(dataDirectory);
+        if (scheduler != null) builder.scheduler(scheduler);
+        return builder.build();
+    }
+
+    private static JobRequest request(Optional<Instant> runAt, Optional<Long> repeat, int timeout) {
+        return new JobRequest("local", "demo.service", JobKind.SERVICE_OPERATION, "service.restart",
+                JsonNodeFactory.instance.objectNode(), Optional.empty(), runAt, repeat, timeout, Optional.empty());
+    }
+
+    private static void enroll(AgentWebMcpRuntime runtime) {
+        OperationExecution enrollment = runtime.executor().execute("service.add", JsonNodeFactory.instance.objectNode().put("serviceId", "demo.service"));
+        assertEquals(OperationExecutionStatus.SUCCESS, enrollment.status());
+    }
+
+    private static OperationExecution executeJob(AgentWebMcpRuntime runtime, String json) throws Exception {
+        return runtime.executor().execute("job.execute", runtime.objectMapper().readTree(json));
+    }
+
+    private static JobDetails awaitTerminal(JobProvider provider, String jobId) throws Exception {
+        for (int attempt = 0; attempt < 240; attempt++) {
             JobDetails details = provider.inspectJob(jobId);
-            if (details.state() != JobState.QUEUED && details.state() != JobState.RUNNING) {
-                return details;
-            }
+            if (details.state() != JobState.QUEUED && details.state() != JobState.SCHEDULED && details.state() != JobState.RUNNING) return details;
             Thread.sleep(25);
         }
         throw new AssertionError("job did not reach terminal state");
     }
 
-    private static OperationExecution success(String operationId, com.fasterxml.jackson.databind.JsonNode input) {
-        Instant now = Instant.now();
-        return new OperationExecution(operationId, OperationExecutionStatus.SUCCESS, now, now, 0, input, null);
+    private static JobDetails awaitRescheduled(JobProvider provider, String jobId) throws Exception {
+        for (int attempt = 0; attempt < 240; attempt++) {
+            JobDetails details = provider.inspectJob(jobId);
+            if (details.state() == JobState.SCHEDULED && details.startedAt() != null) return details;
+            Thread.sleep(25);
+        }
+        throw new AssertionError("recurring job did not reschedule");
+    }
+
+    private static void awaitState(JobProvider provider, String jobId, JobState expected) throws Exception {
+        for (int attempt = 0; attempt < 160; attempt++) {
+            if (provider.inspectJob(jobId).state() == expected) return;
+            Thread.sleep(10);
+        }
+        throw new AssertionError("job did not reach state " + expected);
+    }
+
+    private static final class HoldingScheduler implements ICustomScheduler {
+        @Override public ScheduledFuture<?> runTaskLaterAsync(Runnable task, long delayMs) { return new HeldFuture(delayMs); }
+        @Override public boolean cancelTask(ScheduledFuture<?> task) { return task.cancel(false); }
+    }
+
+    private static final class HeldFuture implements ScheduledFuture<Object> {
+        private final long delayMs;
+        private volatile boolean cancelled;
+        private HeldFuture(long delayMs) { this.delayMs = delayMs; }
+        @Override public long getDelay(TimeUnit unit) { return unit.convert(delayMs, TimeUnit.MILLISECONDS); }
+        @Override public int compareTo(Delayed other) { return Long.compare(getDelay(TimeUnit.MILLISECONDS), other.getDelay(TimeUnit.MILLISECONDS)); }
+        @Override public boolean cancel(boolean mayInterruptIfRunning) { cancelled = true; return true; }
+        @Override public boolean isCancelled() { return cancelled; }
+        @Override public boolean isDone() { return cancelled; }
+        @Override public Object get() { throw new UnsupportedOperationException(); }
+        @Override public Object get(long timeout, TimeUnit unit) { throw new UnsupportedOperationException(); }
     }
 }

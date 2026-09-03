@@ -12,6 +12,7 @@ public final class McpToolPolicy {
             "service.inspect",
             "service.status",
             "service.logs",
+            "service.diagnostics",
             "service.start",
             "service.stop",
             "service.restart",

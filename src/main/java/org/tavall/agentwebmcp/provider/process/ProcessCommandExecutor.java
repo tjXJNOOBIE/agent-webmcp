@@ -5,6 +5,7 @@ import org.tavall.dependency.annotations.DelegatesTo;
 import org.tavall.internal.utils.concurrent.AsyncTask;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
@@ -19,23 +20,34 @@ import java.util.concurrent.TimeoutException;
 public final class ProcessCommandExecutor implements CommandExecutor {
     private static final Duration OUTPUT_DRAIN_TIMEOUT = Duration.ofSeconds(2);
     private static final Duration TERMINATION_TIMEOUT = Duration.ofSeconds(2);
+    private static final int MAX_IO_BYTES = 1_048_576;
 
     @Override
     public CommandResult execute(List<String> command, Duration timeout) {
+        return execute(command, timeout, "");
+    }
+
+    @Override
+    public CommandResult execute(List<String> command, Duration timeout, String stdin) {
         if (command == null || command.isEmpty()) {
             throw new IllegalArgumentException("command is required");
         }
         if (timeout == null || timeout.isZero() || timeout.isNegative()) {
             throw new IllegalArgumentException("timeout must be positive");
         }
+        byte[] input = (stdin == null ? "" : stdin).getBytes(StandardCharsets.UTF_8);
+        if (input.length > MAX_IO_BYTES) {
+            throw new IllegalArgumentException("process stdin exceeds 1 MiB");
+        }
 
         Process process = null;
         try {
-            Process startedProcess = new ProcessBuilder(command).start();
+            Process startedProcess = new ProcessBuilder(List.copyOf(command)).start();
             process = startedProcess;
-            CompletableFuture<byte[]> stdout = AsyncTask.supplyAsync(() -> processInput(startedProcess));
-            CompletableFuture<byte[]> stderr = AsyncTask.supplyAsync(() -> processError(startedProcess));
-
+            CompletableFuture<byte[]> stdout = AsyncTask.supplyAsync(() -> readBounded(startedProcess.getInputStream(), "stdout"));
+            CompletableFuture<byte[]> stderr = AsyncTask.supplyAsync(() -> readBounded(startedProcess.getErrorStream(), "stderr"));
+            startedProcess.getOutputStream().write(input);
+            startedProcess.getOutputStream().close();
             boolean exited = startedProcess.waitFor(timeout.toMillis(), TimeUnit.MILLISECONDS);
             if (!exited) {
                 terminate(startedProcess);
@@ -54,19 +66,15 @@ public final class ProcessCommandExecutor implements CommandExecutor {
         }
     }
 
-    private static byte[] processInput(Process process) {
+    private static byte[] readBounded(InputStream input, String streamName) {
         try {
-            return process.getInputStream().readAllBytes();
+            byte[] bytes = input.readNBytes(MAX_IO_BYTES + 1);
+            if (bytes.length > MAX_IO_BYTES) {
+                throw new ProviderException("PROCESS_OUTPUT_TOO_LARGE", "Provider command " + streamName + " exceeded 1 MiB", 502);
+            }
+            return bytes;
         } catch (IOException exception) {
-            throw new IllegalStateException("Unable to read process stdout", exception);
-        }
-    }
-
-    private static byte[] processError(Process process) {
-        try {
-            return process.getErrorStream().readAllBytes();
-        } catch (IOException exception) {
-            throw new IllegalStateException("Unable to read process stderr", exception);
+            throw new IllegalStateException("Unable to read process " + streamName, exception);
         }
     }
 
@@ -78,6 +86,10 @@ public final class ProcessCommandExecutor implements CommandExecutor {
             throw new ProviderException("PROCESS_INTERRUPTED", "Provider output read was interrupted", 500);
         } catch (ExecutionException | TimeoutException | CancellationException exception) {
             bytes.cancel(true);
+            Throwable cause = exception instanceof ExecutionException ? exception.getCause() : null;
+            if (cause instanceof ProviderException providerException) {
+                throw providerException;
+            }
             throw new ProviderException("PROCESS_OUTPUT_FAILED", "Unable to read provider command output", 500);
         }
     }
@@ -110,17 +122,8 @@ public final class ProcessCommandExecutor implements CommandExecutor {
         if (process == null) {
             return;
         }
-        try {
-            process.getOutputStream().close();
-        } catch (IOException ignored) {
-        }
-        try {
-            process.getInputStream().close();
-        } catch (IOException ignored) {
-        }
-        try {
-            process.getErrorStream().close();
-        } catch (IOException ignored) {
-        }
+        try { process.getOutputStream().close(); } catch (IOException ignored) { }
+        try { process.getInputStream().close(); } catch (IOException ignored) { }
+        try { process.getErrorStream().close(); } catch (IOException ignored) { }
     }
 }

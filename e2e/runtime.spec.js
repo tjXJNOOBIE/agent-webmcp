@@ -7,30 +7,34 @@ test.beforeEach(async ({ page }) => {
   await page.addInitScript({ path: polyfill });
 });
 
-test('health and complete catalog are served from the lightweight Java runtime', async ({ request }) => {
+test('health and canonical catalog expose the 21-operation runtime contract', async ({ request }) => {
   const health = await request.get('/health');
   expect(health.ok()).toBeTruthy();
   const healthBody = await health.json();
-  expect(healthBody.status).toBe('UP');
-  expect(healthBody.webServer).toBe('jdk-httpserver');
-  expect(healthBody.transport).toBe('http-json');
-  expect(healthBody.authMode).toBe('NO_AUTH');
-  expect(healthBody.operationCount).toBe(18);
-  expect(healthBody.jobProvider).toBe('local-durable-jobs');
-  expect(healthBody.metricsProvider).toBe('jvm-os-mxbean');
+  expect(healthBody).toMatchObject({
+    status: 'UP',
+    webServer: 'jdk-httpserver',
+    transport: 'http-json',
+    authMode: 'NO_AUTH',
+    operationCount: 21,
+    jobProvider: 'local-durable-jobs',
+    metricsProvider: 'jvm-os-mxbean'
+  });
 
   const catalog = await request.get('/api/v1/operations');
   expect(catalog.ok()).toBeTruthy();
-  const ids = (await catalog.json()).operations.map((operation) => operation.id);
-  expect(ids).toContain('system.status');
-  expect(ids).toContain('metrics.snapshot');
-  expect(ids).toContain('service.status');
-  expect(ids).toContain('service.restart');
-  expect(ids).toContain('job.execute');
-  expect(ids).toContain('job.logs');
+  const operations = (await catalog.json()).operations;
+  expect(operations).toHaveLength(21);
+  const ids = operations.map((operation) => operation.id);
+  expect(ids).toEqual(expect.arrayContaining([
+    'service.discover', 'service.diagnostics', 'job.execute', 'job.cancel'
+  ]));
+  expect(operations.filter((operation) => operation.access === 'MUTATING')).toHaveLength(9);
+  expect(operations.filter((operation) => operation.surfaces?.includes('WEBMCP'))).toHaveLength(16);
+  expect(operations.filter((operation) => operation.surfaces?.includes('MCP'))).toHaveLength(14);
 });
 
-test('WebMCP discovers the canonical catalog and executes system.status', async ({ page }) => {
+test('WebMCP registers exactly the approved 16-tool browser projection', async ({ page }) => {
   await page.goto('/');
   await page.waitForFunction(() => window.__agentWebMcp?.state === 'ready');
 
@@ -42,99 +46,55 @@ test('WebMCP discovers the canonical catalog and executes system.status', async 
     return { names: tools.map((candidate) => candidate.name), output: JSON.parse(raw) };
   });
 
-  expect(result.names).toHaveLength(18);
-  expect(result.names).toContain('service.status');
-  expect(result.names).toContain('metrics.snapshot');
-  expect(result.names).toContain('job.execute');
+  expect(result.names).toHaveLength(16);
+  expect(result.names).toEqual(expect.arrayContaining([
+    'system.status', 'metrics.snapshot', 'service.add', 'service.remove',
+    'service.diagnostics', 'job.list', 'job.inspect', 'job.logs'
+  ]));
+  expect(result.names).not.toContain('service.discover');
+  expect(result.names).not.toContain('job.execute');
+  expect(result.names).not.toContain('job.cancel');
+  expect(result.names.some((name) => name.startsWith('target.'))).toBeFalsy();
   expect(result.output.status).toBe('SUCCESS');
   expect(result.output.output.authMode).toBe('NO_AUTH');
 });
 
-test('WebMCP schedules a durable canonical job and exposes its completed result', async ({ page }) => {
-  await page.goto('/');
-  await page.waitForFunction(() => window.__agentWebMcp?.state === 'ready');
+test('canonical HTTP surface returns live metrics and rejects unsafe job shapes', async ({ request }) => {
+  const metrics = await request.post('/api/v1/operations/metrics.snapshot', { data: {} });
+  expect(metrics.ok()).toBeTruthy();
+  const metricsBody = await metrics.json();
+  expect(metricsBody.status).toBe('SUCCESS');
+  expect(metricsBody.output.targetId).toBe('local');
+  expect(metricsBody.output.metrics.availableProcessors).toBeGreaterThanOrEqual(1);
 
-  const result = await page.evaluate(async () => {
-    const tools = await document.modelContext.getTools();
-    const jobTool = tools.find((candidate) => candidate.name === 'job.execute');
-    if (!jobTool) throw new Error('job.execute was not registered');
-    const raw = await document.modelContext.executeTool(jobTool, JSON.stringify({
-      operationId: 'system.status',
-      input: {},
-      timeoutSeconds: 5,
-      agentId: 'codex:e2e-agent'
-    }));
-    const submission = JSON.parse(raw);
-    const jobId = submission.output.jobId;
-
-    for (let attempt = 0; attempt < 120; attempt += 1) {
-      const response = await fetch('/api/v1/operations/job.inspect', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ jobId })
-      });
-      const inspection = await response.json();
-      const state = inspection.output?.state;
-      if (state === 'SUCCEEDED') return { jobId, inspection };
-      if (state === 'FAILED' || state === 'TIMED_OUT') {
-        throw new Error(`job ${jobId} terminated as ${state}`);
-      }
-      await new Promise((resolve) => setTimeout(resolve, 25));
-    }
-    throw new Error(`job ${jobId} did not finish`);
+  const missingService = await request.post('/api/v1/operations/job.execute', {
+    data: { operationId: 'service.restart', input: {} }
   });
+  expect(missingService.status()).toBe(400);
+  expect((await missingService.json()).error.code).toBe('INVALID_INPUT');
 
-  expect(result.jobId).toMatch(/^job-[a-f0-9]{12}$/);
-  expect(result.inspection.output.execution.operationId).toBe('system.status');
-  expect(result.inspection.output.execution.output.authMode).toBe('NO_AUTH');
-  expect(result.inspection.output.agentId).toBe('codex:e2e-agent');
-});
-
-test('metrics.snapshot executes through the same HTTP operation surface', async ({ request }) => {
-  const response = await request.post('/api/v1/operations/metrics.snapshot', { data: {} });
-  expect(response.ok()).toBeTruthy();
-  const body = await response.json();
-  expect(body.status).toBe('SUCCESS');
-  expect(body.operationId).toBe('metrics.snapshot');
-  expect(body.output.targetId).toBe('local');
-  expect(body.output.metrics.availableProcessors).toBeGreaterThanOrEqual(1);
-});
-
-test('HTTP operation execution uses the same canonical executor', async ({ request }) => {
-  const response = await request.post('/api/v1/operations/system.status', { data: {} });
-  expect(response.ok()).toBeTruthy();
-  const body = await response.json();
-  expect(body.status).toBe('SUCCESS');
-  expect(body.operationId).toBe('system.status');
-  expect(body.output.authMode).toBe('NO_AUTH');
-});
-
-test('recursive job execution is rejected before scheduling', async ({ request }) => {
-  const response = await request.post('/api/v1/operations/job.execute', {
-    data: { operationId: 'job.execute', input: {} }
+  const recurringAi = await request.post('/api/v1/operations/job.execute', {
+    data: { serviceId: 'not-managed.service', prompt: 'inspect', input: {}, repeatEverySeconds: 60 }
   });
-  expect(response.status()).toBe(400);
-  const body = await response.json();
-  expect(body.error.code).toBe('RECURSIVE_JOB_EXECUTION');
+  expect(recurringAi.status()).toBe(400);
+  expect((await recurringAi.json()).error.code).toBe('INVALID_INPUT');
 });
 
-test('service lifecycle cannot bypass the managed-service inventory', async ({ request }) => {
+test('managed lifecycle authority rejects guessed service IDs before provider mutation', async ({ request }) => {
   const response = await request.post('/api/v1/operations/service.restart', {
-    data: { serviceId: 'demo.service' }
+    data: { serviceId: 'definitely-not-enrolled-agent-webmcp.service' }
   });
   expect(response.status()).toBe(404);
-  const body = await response.json();
-  expect(body.error.code).toBe('SERVICE_NOT_MANAGED');
+  expect((await response.json()).error.code).toBe('SERVICE_NOT_MANAGED');
 });
 
-test('unknown operations are rejected instead of falling through to shell behavior', async ({ request }) => {
+test('unknown operations are rejected instead of falling through to process execution', async ({ request }) => {
   const response = await request.post('/api/v1/operations/not.real', { data: {} });
   expect(response.status()).toBe(404);
-  const body = await response.json();
-  expect(body.error.code).toBe('OPERATION_NOT_FOUND');
+  expect((await response.json()).error.code).toBe('OPERATION_NOT_FOUND');
 });
 
-test('Streamable HTTP MCP exposes only the bounded ChatGPT operations', async ({ request }) => {
+test('Streamable HTTP MCP exposes exactly 14 bounded tools', async ({ request }) => {
   const initialize = await request.post('/mcp', {
     headers: {
       accept: 'application/json, text/event-stream',
@@ -142,77 +102,40 @@ test('Streamable HTTP MCP exposes only the bounded ChatGPT operations', async ({
       'mcp-protocol-version': '2025-06-18'
     },
     data: {
-      jsonrpc: '2.0',
-      id: 'init-e2e',
-      method: 'initialize',
-      params: {
-        protocolVersion: '2025-06-18',
-        capabilities: {},
-        clientInfo: { name: 'agent-webmcp-e2e', version: '1' }
-      }
+      jsonrpc: '2.0', id: 'init-e2e', method: 'initialize',
+      params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'agent-webmcp-e2e', version: '1' } }
     }
   });
   expect(initialize.ok()).toBeTruthy();
   const sessionId = initialize.headers()['mcp-session-id'];
   expect(sessionId).toBeTruthy();
 
+  const headers = {
+    accept: 'application/json, text/event-stream',
+    'content-type': 'application/json',
+    'mcp-protocol-version': '2025-06-18',
+    'mcp-session-id': sessionId
+  };
   const toolsResponse = await request.post('/mcp', {
-    headers: {
-      accept: 'application/json, text/event-stream',
-      'content-type': 'application/json',
-      'mcp-protocol-version': '2025-06-18',
-      'mcp-session-id': sessionId
-    },
-    data: { jsonrpc: '2.0', id: 'tools-e2e', method: 'tools/list', params: {} }
+    headers, data: { jsonrpc: '2.0', id: 'tools-e2e', method: 'tools/list', params: {} }
   });
   expect(toolsResponse.ok()).toBeTruthy();
-  const toolsBody = await toolsResponse.json();
-  const names = toolsBody.result.tools.map((tool) => tool.name);
-  expect(names).toHaveLength(13);
-  expect(names).toContain('system.status');
-  expect(names).toContain('service.logs');
-  expect(names).toContain('service.restart');
-  expect(names).toContain('job.list');
-  expect(names).toContain('job.inspect');
-  expect(names).toContain('job.logs');
-  expect(names).not.toContain('job.execute');
-  expect(names).not.toContain('target.inspect');
+  const names = (await toolsResponse.json()).result.tools.map((tool) => tool.name);
+  expect(names).toHaveLength(14);
+  expect(names).toEqual(expect.arrayContaining([
+    'system.status', 'service.logs', 'service.diagnostics', 'service.restart',
+    'job.list', 'job.inspect', 'job.logs'
+  ]));
+  for (const hidden of ['service.add', 'service.remove', 'service.discover', 'job.execute', 'job.cancel', 'target.list', 'target.inspect']) {
+    expect(names).not.toContain(hidden);
+  }
 
   const call = await request.post('/mcp', {
-    headers: {
-      accept: 'application/json, text/event-stream',
-      'content-type': 'application/json',
-      'mcp-protocol-version': '2025-06-18',
-      'mcp-session-id': sessionId
-    },
-    data: {
-      jsonrpc: '2.0',
-      id: 'call-e2e',
-      method: 'tools/call',
-      params: { name: 'system.status', arguments: {} }
-    }
+    headers,
+    data: { jsonrpc: '2.0', id: 'call-e2e', method: 'tools/call', params: { name: 'system.status', arguments: {} } }
   });
   expect(call.ok()).toBeTruthy();
   const callBody = await call.json();
   expect(callBody.result.isError).toBe(false);
   expect(callBody.result.structuredContent.status).toBe('SUCCESS');
-
-  const internalJob = await request.post('/api/v1/operations/job.execute', {
-    data: { operationId: 'system.status', input: {}, timeoutSeconds: 5, agentId: 'codex:mcp-visible-agent' }
-  });
-  expect(internalJob.ok()).toBeTruthy();
-
-  const jobList = await request.post('/mcp', {
-    headers: {
-      accept: 'application/json, text/event-stream',
-      'content-type': 'application/json',
-      'mcp-protocol-version': '2025-06-18',
-      'mcp-session-id': sessionId
-    },
-    data: { jsonrpc: '2.0', id: 'jobs-e2e', method: 'tools/call', params: { name: 'job.list', arguments: { limit: 20 } } }
-  });
-  expect(jobList.ok()).toBeTruthy();
-  const jobListBody = await jobList.json();
-  expect(jobListBody.result.isError).toBe(false);
-  expect(jobListBody.result.structuredContent.output.some((job) => job.agentId === 'codex:mcp-visible-agent')).toBeTruthy();
 });

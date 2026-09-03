@@ -53,15 +53,14 @@ A September 3 validation pass compiled the current application source together w
 
 Current evidence:
 
-- Java 25 current-source compilation: passed across 180 combined main source files.
-- JUnit current-source suite: 27/27 tests passed, 0 failed.
-- WebMCP/runtime Playwright suite: 9/9 tests passed, including discovery of the 18-tool browser catalog and execution of `system.status` through `document.modelContext`.
-- Fleet Cockpit stateful lifecycle Playwright suite: 1/1 passed, covering add, stop, start, restart, logs, and remove.
+- Java 25 / Gradle compilation and JUnit suite: 45/45 tests passed, 0 failed.
+- Runtime Playwright suite: 6/6 passed, including the 21-operation catalog, exact 16-tool WebMCP projection, exact 14-tool MCP projection, canonical execution, metrics, managed-service authority, and unsafe-operation rejection.
+- Stateful Fleet Cockpit Playwright suite: 3/3 passed. It covers deterministic and explicit-AI discovery, Service Control logs/diagnostics/lifecycle evidence, deterministic/future/recurring/Codex jobs, execution trace and cancellation, Operations, Catalog, Activity/real-session metrics, truthful unavailable Agents state, the Target/Agent/Services/Heartbeat comparison, Settings, and 390px mobile overflow.
 - `scripts/verify-webmcp-challenge.sh`: passed.
 - Production WebMCP JavaScript syntax and generated test polyfill syntax: passed.
 - `git diff --check`: passed.
 
-The Gradle wrapper itself cannot complete inside Tavall's host-local sandbox because Gradle's mandatory single-use daemon starts successfully and then cannot be reached over the sandbox's loopback IPC boundary. This occurs before project test execution. The current-source Java/JUnit/browser evidence above is therefore reported separately rather than falsely describing `./gradlew check` as passing.
+The repository-owned `scripts/ci/run` path now prepares pinned Tavall source composites, runs Gradle tests, validates installation without Codex, executes both Playwright suites, runs the WebMCP challenge static checks, and finishes with `git diff --check`.
 
 ## Judge verification
 

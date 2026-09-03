@@ -7,6 +7,8 @@ import org.tavall.agentwebmcp.operation.OperationCatalog;
 import org.tavall.agentwebmcp.operation.OperationContext;
 import org.tavall.agentwebmcp.operation.OperationExecutor;
 import org.tavall.agentwebmcp.operation.OperationInvoker;
+import org.tavall.agentwebmcp.provider.codex.CodexCliProvider;
+import org.tavall.agentwebmcp.provider.codex.LocalCodexCliProvider;
 import org.tavall.agentwebmcp.provider.job.FileJobRepository;
 import org.tavall.agentwebmcp.provider.job.JobProvider;
 import org.tavall.agentwebmcp.provider.job.JobRepository;
@@ -25,13 +27,18 @@ import org.tavall.dependency.IDependencyAccess;
 import org.tavall.dependency.annotations.DelegatesTo;
 import org.tavall.dependency.maps.DependencyMap;
 import org.tavall.dependency.maps.interfaces.IDependencyMap;
+import org.tavall.scheduler.CustomScheduler;
+import org.tavall.scheduler.interfaces.ICustomScheduler;
 
 import java.nio.file.Path;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 @DelegatesTo
-public final class AgentWebMcpRuntime implements IDependencyAccess {
+public final class AgentWebMcpRuntime implements IDependencyAccess, AutoCloseable {
     public static final String VERSION = "0.1.0-SNAPSHOT";
+
+    private final AtomicBoolean closed = new AtomicBoolean();
 
     private AgentWebMcpRuntime() {
     }
@@ -64,6 +71,15 @@ public final class AgentWebMcpRuntime implements IDependencyAccess {
         return getInstance(OperationExecutor.class);
     }
 
+    @Override
+    public void close() {
+        if (!closed.compareAndSet(false, true)) {
+            return;
+        }
+        getInstance(JobProvider.class).close();
+        getInstance(ICustomScheduler.class).shutdownGracefully(2_000);
+    }
+
     private static Path defaultDataDirectory() {
         String configured = System.getenv("AGENT_WEBMCP_DATA_DIR");
         if (configured != null && !configured.isBlank()) {
@@ -79,6 +95,8 @@ public final class AgentWebMcpRuntime implements IDependencyAccess {
         private ServiceProvider serviceProvider;
         private MetricsProvider metricsProvider;
         private JobProvider jobProvider;
+        private CodexCliProvider codexCliProvider;
+        private ICustomScheduler scheduler;
         private Path dataDirectory;
 
         private Builder() {
@@ -114,6 +132,16 @@ public final class AgentWebMcpRuntime implements IDependencyAccess {
             return this;
         }
 
+        public Builder codexCliProvider(CodexCliProvider codexCliProvider) {
+            this.codexCliProvider = Objects.requireNonNull(codexCliProvider, "codexCliProvider");
+            return this;
+        }
+
+        public Builder scheduler(ICustomScheduler scheduler) {
+            this.scheduler = Objects.requireNonNull(scheduler, "scheduler");
+            return this;
+        }
+
         public Builder dataDirectory(Path dataDirectory) {
             this.dataDirectory = Objects.requireNonNull(dataDirectory, "dataDirectory");
             return this;
@@ -131,6 +159,12 @@ public final class AgentWebMcpRuntime implements IDependencyAccess {
             dependencies.registerInstance(OperationCatalog.class, resolvedCatalog);
 
             dependencies.registerInstance(CommandExecutor.class, new ProcessCommandExecutor());
+
+            ICustomScheduler resolvedScheduler = scheduler == null ? new CustomScheduler() : scheduler;
+            dependencies.registerInstance(ICustomScheduler.class, resolvedScheduler);
+            if (resolvedScheduler instanceof CustomScheduler customScheduler) {
+                dependencies.registerInstance(CustomScheduler.class, customScheduler);
+            }
 
             TargetProvider resolvedTargetProvider = targetProvider == null ? new LocalTargetProvider() : targetProvider;
             dependencies.registerInstance(TargetProvider.class, resolvedTargetProvider);
@@ -150,6 +184,11 @@ public final class AgentWebMcpRuntime implements IDependencyAccess {
                     ? new JvmSystemMetricsProvider()
                     : metricsProvider;
             dependencies.registerInstance(MetricsProvider.class, resolvedMetricsProvider);
+
+            CodexCliProvider resolvedCodexCliProvider = codexCliProvider == null
+                    ? new LocalCodexCliProvider()
+                    : codexCliProvider;
+            dependencies.registerInstance(CodexCliProvider.class, resolvedCodexCliProvider);
 
             JobProvider resolvedJobProvider = jobProvider;
             if (resolvedJobProvider == null) {
@@ -173,6 +212,7 @@ public final class AgentWebMcpRuntime implements IDependencyAccess {
                     dependencies.getInstance(ManagedServiceRepository.class),
                     dependencies.getInstance(MetricsProvider.class),
                     dependencies.getInstance(JobProvider.class),
+                    dependencies.getInstance(CodexCliProvider.class),
                     dependencies.getInstance(OperationInvoker.class)
             );
             dependencies.registerInstance(OperationContext.class, context);
@@ -183,6 +223,7 @@ public final class AgentWebMcpRuntime implements IDependencyAccess {
 
             AgentWebMcpRuntime runtime = new AgentWebMcpRuntime();
             dependencies.registerInstance(AgentWebMcpRuntime.class, runtime);
+            resolvedJobProvider.start();
             return runtime;
         }
     }

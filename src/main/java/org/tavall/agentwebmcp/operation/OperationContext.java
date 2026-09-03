@@ -1,6 +1,7 @@
 package org.tavall.agentwebmcp.operation;
 
 import org.tavall.agentwebmcp.AuthMode;
+import org.tavall.agentwebmcp.provider.codex.CodexCliProvider;
 import org.tavall.agentwebmcp.provider.job.JobProvider;
 import org.tavall.agentwebmcp.provider.metrics.MetricsProvider;
 import org.tavall.agentwebmcp.provider.service.ManagedServiceRepository;
@@ -18,6 +19,7 @@ public record OperationContext(
         ManagedServiceRepository managedServiceRepository,
         MetricsProvider metricsProvider,
         JobProvider jobProvider,
+        CodexCliProvider codexCliProvider,
         OperationInvoker operationInvoker
 ) {
     public OperationContext {
@@ -29,6 +31,7 @@ public record OperationContext(
         Objects.requireNonNull(managedServiceRepository, "managedServiceRepository");
         Objects.requireNonNull(metricsProvider, "metricsProvider");
         Objects.requireNonNull(jobProvider, "jobProvider");
+        Objects.requireNonNull(codexCliProvider, "codexCliProvider");
         Objects.requireNonNull(operationInvoker, "operationInvoker");
     }
 

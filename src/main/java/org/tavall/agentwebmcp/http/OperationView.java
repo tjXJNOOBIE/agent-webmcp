@@ -3,6 +3,7 @@ package org.tavall.agentwebmcp.http;
 import org.tavall.agentwebmcp.mcp.McpToolPolicy;
 import org.tavall.agentwebmcp.operation.OperationRegistration;
 import org.tavall.agentwebmcp.operation.schema.RecordJsonSchema;
+import org.tavall.agentwebmcp.web.WebMcpToolPolicy;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -16,7 +17,10 @@ public record OperationView(
         List<String> surfaces
 ) {
     public static OperationView from(OperationRegistration<?, ?> registration) {
-        List<String> surfaces = new ArrayList<>(List.of("CLI", "HTTP", "WEBMCP"));
+        List<String> surfaces = new ArrayList<>(List.of("CLI", "HTTP"));
+        if (WebMcpToolPolicy.allows(registration)) {
+            surfaces.add("WEBMCP");
+        }
         if (McpToolPolicy.allows(registration)) {
             surfaces.add("MCP");
         }

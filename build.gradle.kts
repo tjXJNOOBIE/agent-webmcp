@@ -1,4 +1,5 @@
 import org.gradle.api.tasks.Exec
+import org.gradle.api.tasks.JavaExec
 import org.gradle.api.tasks.compile.JavaCompile
 import org.gradle.api.tasks.testing.Test
 import org.gradle.jvm.tasks.Jar
@@ -16,9 +17,7 @@ java {
     withSourcesJar()
 }
 
-repositories {
-    mavenCentral()
-}
+repositories { mavenCentral() }
 
 dependencies {
     implementation("com.fasterxml.jackson.core:jackson-databind:2.18.3")
@@ -28,8 +27,7 @@ dependencies {
     implementation("org.tavall:tavall-di") { version { branch = "main" } }
     implementation("org.tavall:tavall-concurrency") { version { branch = "main" } }
     implementation("org.tavall:tavall-registry") { version { branch = "main" } }
-    // Required by tavall-registry's current public API graph; Agent WebMCP does not
-    // otherwise claim cache ownership or introduce cache semantics here.
+    implementation("org.tavall:tavall-scheduler") { version { branch = "main" } }
     implementation("org.tavall:abstract-cache-system") { version { branch = "main" } }
 
     testImplementation(platform("org.junit:junit-bom:5.11.4"))
@@ -37,9 +35,7 @@ dependencies {
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.11.4")
 }
 
-application {
-    mainClass.set("org.tavall.agentwebmcp.AgentWebMcpApplication")
-}
+application { mainClass.set("org.tavall.agentwebmcp.AgentWebMcpApplication") }
 
 tasks.withType<JavaCompile>().configureEach {
     options.release.set(25)
@@ -69,6 +65,7 @@ val npmCi = tasks.register<Exec>("npmCi") {
 
 val e2eInstallBrowser = tasks.register<Exec>("e2eInstallBrowser") {
     dependsOn(npmCi)
+    environment("PLAYWRIGHT_BROWSERS_PATH", layout.projectDirectory.dir(".playwright-browsers").asFile.absolutePath)
     commandLine("npx", "playwright", "install", "chromium")
 }
 
@@ -77,9 +74,16 @@ val e2e = tasks.register<Exec>("e2e") {
     description = "Runs browser E2E coverage against the installed Agent WebMCP runtime."
     dependsOn(tasks.named("installDist"), e2eInstallBrowser)
     environment("AGENT_WEBMCP_DIST", layout.buildDirectory.dir("install/agent-webmcp").get().asFile.absolutePath)
+    environment("PLAYWRIGHT_BROWSERS_PATH", layout.projectDirectory.dir(".playwright-browsers").asFile.absolutePath)
     commandLine("npm", "run", "test:e2e")
 }
 
-tasks.named("check") {
-    dependsOn(e2e)
+tasks.register<JavaExec>("panelFixture") {
+    group = "verification"
+    description = "Runs the stateful provider/Codex fixture used by Fleet Cockpit Playwright tests."
+    dependsOn(tasks.named("testClasses"))
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("org.tavall.agentwebmcp.support.PanelFixtureApplication")
 }
+
+tasks.named("check") { dependsOn(e2e) }

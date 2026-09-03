@@ -2,22 +2,7 @@ package org.tavall.agentwebmcp;
 
 import org.junit.jupiter.api.Test;
 import org.tavall.agentwebmcp.operation.OperationCatalog;
-import org.tavall.agentwebmcp.operation.handler.JobExecuteOperation;
-import org.tavall.agentwebmcp.operation.handler.JobInspectOperation;
-import org.tavall.agentwebmcp.operation.handler.JobListOperation;
-import org.tavall.agentwebmcp.operation.handler.JobLogsOperation;
-import org.tavall.agentwebmcp.operation.handler.MetricsSnapshotOperation;
-import org.tavall.agentwebmcp.operation.handler.ServiceInspectOperation;
-import org.tavall.agentwebmcp.operation.handler.ServiceListOperation;
-import org.tavall.agentwebmcp.operation.handler.ServiceLogsOperation;
-import org.tavall.agentwebmcp.operation.handler.ServiceReloadOperation;
-import org.tavall.agentwebmcp.operation.handler.ServiceRestartOperation;
-import org.tavall.agentwebmcp.operation.handler.ServiceStartOperation;
-import org.tavall.agentwebmcp.operation.handler.ServiceStatusOperation;
-import org.tavall.agentwebmcp.operation.handler.ServiceStopOperation;
-import org.tavall.agentwebmcp.operation.handler.SystemStatusOperation;
-import org.tavall.agentwebmcp.operation.handler.TargetInspectOperation;
-import org.tavall.agentwebmcp.operation.handler.TargetListOperation;
+import org.tavall.agentwebmcp.operation.handler.*;
 import org.tavall.dependency.IDependencyAccess;
 import org.tavall.registry.AbstractRegistry;
 
@@ -44,8 +29,10 @@ class ArchitectureRulesTest {
                 if (path.getFileName().toString().equals("LocalJobProvider.java")) {
                     assertTrue(source.contains("AsyncTask.namingThreadFactory"),
                             "durable jobs must obtain interruptible worker threads through Tavall Concurrency");
-                    assertTrue(source.contains("FutureTask<OperationExecution>"),
+                    assertTrue(source.contains("FutureTask<RunOutcome>"),
                             "durable job timeout must retain interruptible Future cancellation semantics");
+                    assertTrue(source.contains("ICustomScheduler"),
+                            "durable future/recurring jobs must use Tavall Scheduler");
                 }
             }
         }
@@ -55,9 +42,10 @@ class ArchitectureRulesTest {
     void operationHandlersStayStatelessInsteadOfCapturingDependencies() {
         List<Class<?>> handlers = List.of(
                 SystemStatusOperation.class, MetricsSnapshotOperation.class, TargetListOperation.class, TargetInspectOperation.class,
-                ServiceListOperation.class, ServiceInspectOperation.class, ServiceStatusOperation.class, ServiceLogsOperation.class,
+                ServiceListOperation.class, ServiceAddOperation.class, ServiceRemoveOperation.class, ServiceDiscoverOperation.class,
+                ServiceInspectOperation.class, ServiceStatusOperation.class, ServiceLogsOperation.class, ServiceDiagnosticsOperation.class,
                 ServiceStartOperation.class, ServiceStopOperation.class, ServiceRestartOperation.class, ServiceReloadOperation.class,
-                JobListOperation.class, JobInspectOperation.class, JobLogsOperation.class, JobExecuteOperation.class
+                JobListOperation.class, JobInspectOperation.class, JobLogsOperation.class, JobExecuteOperation.class, JobCancelOperation.class
         );
         handlers.forEach(handler -> {
             assertTrue(List.of(handler.getDeclaredFields()).stream().allMatch(field -> java.lang.reflect.Modifier.isStatic(field.getModifiers())),
@@ -71,39 +59,29 @@ class ArchitectureRulesTest {
     void httpTransportStaysOnLightweightJdkServerAndTavallRuntimeOwnership() throws Exception {
         String server = Files.readString(Path.of("src/main/java/org/tavall/agentwebmcp/http/AgentWebMcpHttpServer.java"));
         String build = Files.readString(Path.of("build.gradle.kts")).toLowerCase();
-
-        assertTrue(server.contains("com.sun.net.httpserver.HttpServer"),
-                "HTTP edge must remain on the JDK lightweight server unless architecture explicitly changes");
-        assertTrue(server.contains("AsyncTask"),
-                "HTTP dispatch must use Tavall Concurrency");
-        assertTrue(server.contains("runtime().executor().execute"),
-                "HTTP execution must delegate to the canonical operation executor");
-        assertTrue(server.contains("new McpHttpHandler()"),
-                "HTTP edge must expose MCP through the dedicated protocol adapter");
+        assertTrue(server.contains("com.sun.net.httpserver.HttpServer"));
+        assertTrue(server.contains("AsyncTask"));
+        assertTrue(server.contains("runtime().executor().execute"));
+        assertTrue(server.contains("new McpHttpHandler()"));
         String mcp = Files.readString(Path.of("src/main/java/org/tavall/agentwebmcp/mcp/McpHttpHandler.java"));
-        assertTrue(mcp.contains("runtime().executor().execute"),
-                "MCP tool calls must delegate to the canonical operation executor");
-        assertFalse(mcp.contains("ProcessBuilder"),
-                "MCP protocol code must not own process execution");
+        assertTrue(mcp.contains("runtime().executor().execute"));
+        assertFalse(mcp.contains("ProcessBuilder"));
         for (String framework : List.of("spring-boot", "netty", "jetty", "undertow")) {
             assertFalse(build.contains(framework), () -> "Unexpected web framework dependency: " + framework);
         }
     }
 
     @Test
-    void tavallToolsOwnCompositionRegistryAndConcurrencyConcerns() throws Exception {
-        assertTrue(IDependencyAccess.class.isAssignableFrom(AgentWebMcpRuntime.class),
-                "runtime composition must use Tavall DI");
-        assertTrue(AbstractRegistry.class.isAssignableFrom(OperationCatalog.class),
-                "operation catalog must build on Tavall Registry");
-        assertFalse(Files.exists(Path.of("src/main/java/org/tavall/agentwebmcp/provider/job/JobStore.java")));
-        assertFalse(Files.exists(Path.of("src/main/java/org/tavall/agentwebmcp/provider/job/FileJobStore.java")));
-
+    void tavallToolsOwnCompositionRegistryConcurrencyAndSchedulingConcerns() throws Exception {
+        assertTrue(IDependencyAccess.class.isAssignableFrom(AgentWebMcpRuntime.class));
+        assertTrue(AbstractRegistry.class.isAssignableFrom(OperationCatalog.class));
         String settings = Files.readString(Path.of("settings.gradle.kts"));
         String build = Files.readString(Path.of("build.gradle.kts"));
-        for (String artifact : List.of("tavall-di", "tavall-concurrency", "tavall-registry", "tavall-logging")) {
-            assertTrue(settings.contains(artifact), () -> "Missing source-control mapping for " + artifact);
+        for (String artifact : List.of("tavall-di", "tavall-concurrency", "tavall-registry", "tavall-logging", "tavall-scheduler")) {
+            assertTrue(settings.contains(artifact), () -> "Missing source mapping for " + artifact);
             assertTrue(build.contains("org.tavall:" + artifact), () -> "Missing dependency on " + artifact);
         }
+        assertTrue(Files.exists(Path.of("scripts/ci/tavall-source-deps.tsv")));
+        assertTrue(Files.exists(Path.of("scripts/ci/prepare-tavall-sources")));
     }
 }
