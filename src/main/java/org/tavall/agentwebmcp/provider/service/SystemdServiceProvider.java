@@ -3,25 +3,24 @@ package org.tavall.agentwebmcp.provider.service;
 import org.tavall.agentwebmcp.provider.ProviderException;
 import org.tavall.agentwebmcp.provider.process.CommandExecutor;
 import org.tavall.agentwebmcp.provider.process.CommandResult;
+import org.tavall.dependency.DependencyAccess;
+import org.tavall.dependency.annotations.DelegatesTo;
 
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
-public final class SystemdServiceProvider implements ServiceProvider {
+@DelegatesTo(ServiceProvider.class)
+public final class SystemdServiceProvider implements ServiceProvider, DependencyAccess<CommandExecutor> {
     private static final Pattern SERVICE_ID = Pattern.compile("[A-Za-z0-9_.@:-]+");
-    private final CommandExecutor commandExecutor;
     private final Duration commandTimeout;
 
     private SystemdServiceProvider(Builder builder) {
-        this.commandExecutor = Objects.requireNonNull(builder.commandExecutor, "commandExecutor");
         this.commandTimeout = Objects.requireNonNull(builder.commandTimeout, "commandTimeout");
     }
 
@@ -37,7 +36,7 @@ public final class SystemdServiceProvider implements ServiceProvider {
     @Override
     public boolean available() {
         try {
-            return commandExecutor.execute(List.of("systemctl", "--version"), Duration.ofSeconds(3)).successful();
+            return commandExecutor().execute(List.of("systemctl", "--version"), Duration.ofSeconds(3)).successful();
         } catch (ProviderException exception) {
             return false;
         }
@@ -144,8 +143,12 @@ public final class SystemdServiceProvider implements ServiceProvider {
         return new ServiceMutationResult(validServiceId, action, inspectService(validServiceId));
     }
 
+    private CommandExecutor commandExecutor() {
+        return getInstance();
+    }
+
     private CommandResult run(List<String> command) {
-        CommandResult result = commandExecutor.execute(List.copyOf(command), commandTimeout);
+        CommandResult result = commandExecutor().execute(List.copyOf(command), commandTimeout);
         if (result.timedOut()) {
             throw new ProviderException("PROVIDER_TIMEOUT", "Provider command timed out: " + command.getFirst(), 504);
         }
@@ -212,19 +215,13 @@ public final class SystemdServiceProvider implements ServiceProvider {
     }
 
     public static final class Builder {
-        private CommandExecutor commandExecutor;
         private Duration commandTimeout = Duration.ofSeconds(15);
 
         private Builder() {
         }
 
-        public Builder commandExecutor(CommandExecutor commandExecutor) {
-            this.commandExecutor = commandExecutor;
-            return this;
-        }
-
         public Builder commandTimeout(Duration commandTimeout) {
-            this.commandTimeout = commandTimeout;
+            this.commandTimeout = Objects.requireNonNull(commandTimeout, "commandTimeout");
             return this;
         }
 

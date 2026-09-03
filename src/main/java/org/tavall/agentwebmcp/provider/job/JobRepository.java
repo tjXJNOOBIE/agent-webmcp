@@ -3,7 +3,7 @@ package org.tavall.agentwebmcp.provider.job;
 import java.util.List;
 import java.util.function.UnaryOperator;
 
-public interface JobStore {
+public interface JobRepository {
     List<JobRecord> list();
 
     JobRecord read(String jobId);

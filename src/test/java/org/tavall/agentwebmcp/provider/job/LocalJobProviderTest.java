@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.tavall.agentwebmcp.operation.OperationExecution;
 import org.tavall.agentwebmcp.operation.OperationExecutionStatus;
+import org.tavall.dependency.maps.DependencyMap;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -105,7 +106,11 @@ class LocalJobProviderTest {
     }
 
     private LocalJobProvider provider() {
-        return LocalJobProvider.builder().objectMapper(objectMapper).dataDirectory(dataDirectory).build();
+        DependencyMap dependencies = DependencyMap.getDependencyMap();
+        dependencies.registerInstance(ObjectMapper.class, objectMapper);
+        JobRepository repository = FileJobRepository.builder().dataDirectory(dataDirectory).build();
+        dependencies.registerInstance(JobRepository.class, repository);
+        return new LocalJobProvider();
     }
 
     private static JobDetails awaitTerminal(LocalJobProvider provider, String jobId) throws Exception {

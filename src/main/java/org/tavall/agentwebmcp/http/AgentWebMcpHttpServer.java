@@ -8,6 +8,8 @@ import com.sun.net.httpserver.HttpServer;
 import org.tavall.agentwebmcp.AgentWebMcpRuntime;
 import org.tavall.agentwebmcp.operation.OperationExecution;
 import org.tavall.agentwebmcp.operation.OperationExecutionStatus;
+import org.tavall.dependency.DependencyAccess;
+import org.tavall.internal.utils.concurrent.AsyncTask;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -17,28 +19,42 @@ import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
-import java.util.concurrent.Executors;
 
-public final class AgentWebMcpHttpServer implements AutoCloseable {
+/**
+ * Lightweight Java HTTP transport for Agent WebMCP.
+ *
+ * <p>The JDK server owns sockets and HTTP contexts only. Tavall DI owns runtime dependencies,
+ * Tavall Concurrency owns request dispatch, and the canonical operation executor owns product
+ * behavior. This class must not become a second operation/service framework.</p>
+ */
+public final class AgentWebMcpHttpServer implements AutoCloseable, DependencyAccess<AgentWebMcpRuntime> {
+    public static final String IMPLEMENTATION = "jdk-httpserver";
+    public static final String TRANSPORT = "http-json";
     private static final int MAX_REQUEST_BYTES = 1_048_576;
-    private final AgentWebMcpRuntime runtime;
+
     private final ObjectMapper objectMapper;
     private final HttpServer server;
 
     private AgentWebMcpHttpServer(Builder builder) {
-        this.runtime = Objects.requireNonNull(builder.runtime, "runtime");
-        this.objectMapper = runtime.objectMapper();
+        this.objectMapper = runtime().objectMapper();
         try {
             this.server = HttpServer.create(new InetSocketAddress(builder.host, builder.port), 0);
         } catch (IOException exception) {
             throw new IllegalStateException("Unable to bind Agent WebMCP HTTP server", exception);
         }
-        server.setExecutor(Executors.newVirtualThreadPerTaskExecutor());
+        server.setExecutor(command -> AsyncTask.runAsync(command));
         server.createContext("/health", this::health);
         server.createContext("/api/v1/operations", this::operations);
-        server.createContext("/assets/agent-webmcp-webmcp.js", exchange -> staticResource(exchange, "/web/agent-webmcp-webmcp.js", "text/javascript; charset=utf-8"));
-        server.createContext("/", exchange -> staticResource(exchange, "/web/index.html", "text/html; charset=utf-8"));
+        server.createContext("/assets/agent-webmcp-webmcp.js", exchange -> staticResource(
+                exchange,
+                "/web/agent-webmcp-webmcp.js",
+                "text/javascript; charset=utf-8"
+        ));
+        server.createContext("/", exchange -> staticResource(
+                exchange,
+                "/web/index.html",
+                "text/html; charset=utf-8"
+        ));
     }
 
     public static Builder builder() {
@@ -62,6 +78,10 @@ public final class AgentWebMcpHttpServer implements AutoCloseable {
         server.stop(0);
     }
 
+    private AgentWebMcpRuntime runtime() {
+        return getInstance();
+    }
+
     private void health(HttpExchange exchange) throws IOException {
         if (!"GET".equals(exchange.getRequestMethod())) {
             methodNotAllowed(exchange, "GET");
@@ -70,12 +90,14 @@ public final class AgentWebMcpHttpServer implements AutoCloseable {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("status", "UP");
         body.put("version", AgentWebMcpRuntime.VERSION);
-        body.put("authMode", runtime.context().authMode().name());
-        body.put("operationCount", runtime.catalog().size());
-        body.put("serviceProvider", runtime.context().serviceProvider().providerName());
-        body.put("serviceProviderAvailable", runtime.context().serviceProvider().available());
-        body.put("metricsProvider", runtime.context().metricsProvider().providerName());
-        body.put("jobProvider", runtime.context().jobProvider().providerName());
+        body.put("webServer", IMPLEMENTATION);
+        body.put("transport", TRANSPORT);
+        body.put("authMode", runtime().context().authMode().name());
+        body.put("operationCount", runtime().catalog().size());
+        body.put("serviceProvider", runtime().context().serviceProvider().providerName());
+        body.put("serviceProviderAvailable", runtime().context().serviceProvider().available());
+        body.put("metricsProvider", runtime().context().metricsProvider().providerName());
+        body.put("jobProvider", runtime().context().jobProvider().providerName());
         writeJson(exchange, 200, body);
     }
 
@@ -86,7 +108,9 @@ public final class AgentWebMcpHttpServer implements AutoCloseable {
                 methodNotAllowed(exchange, "GET");
                 return;
             }
-            List<OperationView> operations = runtime.catalog().registrations().stream().map(OperationView::from).toList();
+            List<OperationView> operations = runtime().catalog().registrations().stream()
+                    .map(OperationView::from)
+                    .toList();
             writeJson(exchange, 200, Map.of("operations", operations));
             return;
         }
@@ -113,8 +137,10 @@ public final class AgentWebMcpHttpServer implements AutoCloseable {
             return;
         }
 
-        OperationExecution execution = runtime.executor().execute(operationId, input);
-        int status = execution.status() == OperationExecutionStatus.SUCCESS ? 200 : execution.error().httpStatus();
+        OperationExecution execution = runtime().executor().execute(operationId, input);
+        int status = execution.status() == OperationExecutionStatus.SUCCESS
+                ? 200
+                : execution.error().httpStatus();
         writeJson(exchange, status, execution);
     }
 
@@ -165,7 +191,7 @@ public final class AgentWebMcpHttpServer implements AutoCloseable {
     private void addCommonHeaders(HttpExchange exchange) {
         exchange.getResponseHeaders().set("Cache-Control", "no-store");
         exchange.getResponseHeaders().set("X-Content-Type-Options", "nosniff");
-        exchange.getResponseHeaders().set("X-Agent-WebMCP-Auth-Mode", runtime.context().authMode().name());
+        exchange.getResponseHeaders().set("X-Agent-WebMCP-Auth-Mode", runtime().context().authMode().name());
     }
 
     private static Map<String, Object> errorBody(String code, String message) {
@@ -179,16 +205,10 @@ public final class AgentWebMcpHttpServer implements AutoCloseable {
     }
 
     public static final class Builder {
-        private AgentWebMcpRuntime runtime;
         private String host = "127.0.0.1";
         private int port = 7188;
 
         private Builder() {
-        }
-
-        public Builder runtime(AgentWebMcpRuntime runtime) {
-            this.runtime = runtime;
-            return this;
         }
 
         public Builder host(String host) {

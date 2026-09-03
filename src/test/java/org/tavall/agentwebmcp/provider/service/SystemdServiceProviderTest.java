@@ -3,6 +3,7 @@ package org.tavall.agentwebmcp.provider.service;
 import org.junit.jupiter.api.Test;
 import org.tavall.agentwebmcp.provider.process.CommandExecutor;
 import org.tavall.agentwebmcp.provider.process.CommandResult;
+import org.tavall.dependency.maps.DependencyMap;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -16,9 +17,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class SystemdServiceProviderTest {
     @Test
     void restartUsesArgumentVectorAndReturnsObservedState() {
-        FakeCommandExecutor commands = new FakeCommandExecutor();
+        FakeCommandExecutor commands = registerCommands();
         SystemdServiceProvider provider = SystemdServiceProvider.builder()
-                .commandExecutor(commands)
                 .commandTimeout(Duration.ofSeconds(2))
                 .build();
 
@@ -31,8 +31,8 @@ class SystemdServiceProviderTest {
 
     @Test
     void rejectsShellLikeServiceIdentifiersBeforeExecution() {
-        FakeCommandExecutor commands = new FakeCommandExecutor();
-        SystemdServiceProvider provider = SystemdServiceProvider.builder().commandExecutor(commands).build();
+        FakeCommandExecutor commands = registerCommands();
+        SystemdServiceProvider provider = SystemdServiceProvider.builder().build();
         int before = commands.commands.size();
 
         assertThrows(IllegalArgumentException.class, () -> provider.restartService("demo.service;rm"));
@@ -41,8 +41,8 @@ class SystemdServiceProviderTest {
 
     @Test
     void logsAreBoundedAndCursorIsParsed() {
-        FakeCommandExecutor commands = new FakeCommandExecutor();
-        SystemdServiceProvider provider = SystemdServiceProvider.builder().commandExecutor(commands).build();
+        FakeCommandExecutor commands = registerCommands();
+        SystemdServiceProvider provider = SystemdServiceProvider.builder().build();
 
         ServiceLogSlice logs = provider.readLogs("demo.service", 25, Optional.of("cursor-old"));
 
@@ -51,6 +51,12 @@ class SystemdServiceProviderTest {
         assertTrue(logs.output().contains("first"));
         assertTrue(commands.commands.stream().anyMatch(command -> command.contains("--after-cursor=cursor-old")));
         assertThrows(IllegalArgumentException.class, () -> provider.readLogs("demo.service", 1001, Optional.empty()));
+    }
+
+    private static FakeCommandExecutor registerCommands() {
+        FakeCommandExecutor commands = new FakeCommandExecutor();
+        DependencyMap.getDependencyMap().registerInstance(CommandExecutor.class, commands);
+        return commands;
     }
 
     private static final class FakeCommandExecutor implements CommandExecutor {

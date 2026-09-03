@@ -1,19 +1,21 @@
 package org.tavall.agentwebmcp.provider.process;
 
 import org.tavall.agentwebmcp.provider.ProviderException;
+import org.tavall.dependency.annotations.DelegatesTo;
+import org.tavall.internal.utils.concurrent.AsyncTask;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.CancellationException;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
+@DelegatesTo(CommandExecutor.class)
 public final class ProcessCommandExecutor implements CommandExecutor {
     private static final Duration OUTPUT_DRAIN_TIMEOUT = Duration.ofSeconds(2);
     private static final Duration TERMINATION_TIMEOUT = Duration.ofSeconds(2);
@@ -28,13 +30,11 @@ public final class ProcessCommandExecutor implements CommandExecutor {
         }
 
         Process process = null;
-        ExecutorService streamReaders = null;
         try {
             Process startedProcess = new ProcessBuilder(command).start();
             process = startedProcess;
-            streamReaders = Executors.newVirtualThreadPerTaskExecutor();
-            Future<byte[]> stdout = streamReaders.submit(() -> processInput(startedProcess));
-            Future<byte[]> stderr = streamReaders.submit(() -> processError(startedProcess));
+            CompletableFuture<byte[]> stdout = AsyncTask.supplyAsync(() -> processInput(startedProcess));
+            CompletableFuture<byte[]> stderr = AsyncTask.supplyAsync(() -> processError(startedProcess));
 
             boolean exited = startedProcess.waitFor(timeout.toMillis(), TimeUnit.MILLISECONDS);
             if (!exited) {
@@ -50,19 +50,24 @@ public final class ProcessCommandExecutor implements CommandExecutor {
             Thread.currentThread().interrupt();
             throw new ProviderException("PROCESS_INTERRUPTED", "Provider command was interrupted", 500);
         } finally {
-            if (streamReaders != null) {
-                streamReaders.shutdownNow();
-            }
             closeProcessStreams(process);
         }
     }
 
-    private static byte[] processInput(Process process) throws IOException {
-        return process.getInputStream().readAllBytes();
+    private static byte[] processInput(Process process) {
+        try {
+            return process.getInputStream().readAllBytes();
+        } catch (IOException exception) {
+            throw new IllegalStateException("Unable to read process stdout", exception);
+        }
     }
 
-    private static byte[] processError(Process process) throws IOException {
-        return process.getErrorStream().readAllBytes();
+    private static byte[] processError(Process process) {
+        try {
+            return process.getErrorStream().readAllBytes();
+        } catch (IOException exception) {
+            throw new IllegalStateException("Unable to read process stderr", exception);
+        }
     }
 
     private static String decodeRequired(Future<byte[]> bytes) {

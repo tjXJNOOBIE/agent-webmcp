@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import org.tavall.agentwebmcp.http.AgentWebMcpHttpServer;
 import org.tavall.agentwebmcp.http.OperationView;
+import org.tavall.internal.utils.concurrent.AsyncTask;
 import org.tavall.logging.Log;
 
 import java.util.Arrays;
@@ -28,11 +29,13 @@ public final class AgentWebMcpApplication {
         String host = option(args, "--host", "127.0.0.1");
         int port = Integer.parseInt(option(args, "--port", "7188"));
         AgentWebMcpHttpServer server = AgentWebMcpHttpServer.builder()
-                .runtime(runtime)
                 .host(host)
                 .port(port)
                 .build();
-        Runtime.getRuntime().addShutdownHook(new Thread(server::close, "agent-webmcp-shutdown"));
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            server.close();
+            AsyncTask.shutdown();
+        }, "agent-webmcp-shutdown"));
         server.start();
         Log.success("Agent WebMCP listening at http://" + server.host() + ":" + server.port());
         Log.warn("NO_AUTH is active. Keep this endpoint behind the trusted local/private tunnel boundary you control.");

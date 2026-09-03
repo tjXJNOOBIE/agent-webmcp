@@ -19,13 +19,15 @@ class AgentWebMcpHttpServerTest {
     Path dataDirectory;
 
     @Test
-    void servesCatalogAndCanonicalExecution() throws Exception {
-        AgentWebMcpRuntime runtime = AgentWebMcpRuntime.builder()
+    void servesCatalogAndCanonicalExecutionFromLightweightJavaTransport() throws Exception {
+        AgentWebMcpRuntime.builder()
                 .serviceProvider(new FakeServiceProvider())
                 .dataDirectory(dataDirectory)
                 .build();
-        try (AgentWebMcpHttpServer server = AgentWebMcpHttpServer.builder().runtime(runtime).port(0).build()) {
+        try (AgentWebMcpHttpServer server = AgentWebMcpHttpServer.builder().port(0).build()) {
             server.start();
+            assertEquals("127.0.0.1", server.host());
+
             HttpClient client = HttpClient.newHttpClient();
             String base = "http://127.0.0.1:" + server.port();
 
@@ -34,6 +36,8 @@ class AgentWebMcpHttpServerTest {
                     HttpResponse.BodyHandlers.ofString()
             );
             assertEquals(200, health.statusCode());
+            assertTrue(health.body().contains("\"webServer\":\"jdk-httpserver\""));
+            assertTrue(health.body().contains("\"transport\":\"http-json\""));
             assertTrue(health.body().contains("\"authMode\":\"NO_AUTH\""));
             assertTrue(health.body().contains("\"operationCount\":16"));
             assertTrue(health.body().contains("local-durable-jobs"));

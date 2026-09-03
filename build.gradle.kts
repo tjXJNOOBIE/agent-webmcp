@@ -24,9 +24,13 @@ dependencies {
     implementation("com.fasterxml.jackson.core:jackson-databind:2.18.3")
     implementation("com.fasterxml.jackson.datatype:jackson-datatype-jdk8:2.18.3")
     implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.18.3")
-    implementation("org.tavall:tavall-logging") {
-        version { branch = "main" }
-    }
+    implementation("org.tavall:tavall-logging") { version { branch = "main" } }
+    implementation("org.tavall:tavall-di") { version { branch = "main" } }
+    implementation("org.tavall:tavall-concurrency") { version { branch = "main" } }
+    implementation("org.tavall:tavall-registry") { version { branch = "main" } }
+    // Required by tavall-registry's current public API graph; Agent WebMCP does not
+    // otherwise claim cache ownership or introduce cache semantics here.
+    implementation("org.tavall:abstract-cache-system") { version { branch = "main" } }
 
     testImplementation(platform("org.junit:junit-bom:5.11.4"))
     testImplementation("org.junit.jupiter:junit-jupiter")

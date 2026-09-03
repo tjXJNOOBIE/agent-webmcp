@@ -7,11 +7,13 @@ test.beforeEach(async ({ page }) => {
   await page.addInitScript({ path: polyfill });
 });
 
-test('health and complete catalog are served from the Java runtime', async ({ request }) => {
+test('health and complete catalog are served from the lightweight Java runtime', async ({ request }) => {
   const health = await request.get('/health');
   expect(health.ok()).toBeTruthy();
   const healthBody = await health.json();
   expect(healthBody.status).toBe('UP');
+  expect(healthBody.webServer).toBe('jdk-httpserver');
+  expect(healthBody.transport).toBe('http-json');
   expect(healthBody.authMode).toBe('NO_AUTH');
   expect(healthBody.operationCount).toBe(16);
   expect(healthBody.jobProvider).toBe('local-durable-jobs');

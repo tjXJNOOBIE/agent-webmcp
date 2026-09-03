@@ -1,12 +1,14 @@
 package org.tavall.agentwebmcp.provider.target;
 
 import org.tavall.agentwebmcp.provider.ProviderException;
+import org.tavall.dependency.annotations.DelegatesTo;
 
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.List;
 import java.util.Map;
 
+@DelegatesTo(TargetProvider.class)
 public final class LocalTargetProvider implements TargetProvider {
     public static final String LOCAL_TARGET_ID = "local";
 

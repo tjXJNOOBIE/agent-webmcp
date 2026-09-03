@@ -1,10 +1,13 @@
 package org.tavall.agentwebmcp.provider.metrics;
 
+import org.tavall.dependency.annotations.DelegatesTo;
+
 import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryMXBean;
 import java.lang.management.MemoryUsage;
 import java.time.Instant;
 
+@DelegatesTo(MetricsProvider.class)
 public final class JvmSystemMetricsProvider implements MetricsProvider {
     @Override
     public String providerName() {

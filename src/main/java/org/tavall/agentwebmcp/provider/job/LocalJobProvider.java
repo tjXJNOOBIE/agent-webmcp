@@ -5,8 +5,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.tavall.agentwebmcp.operation.OperationExecution;
 import org.tavall.agentwebmcp.operation.OperationExecutionStatus;
 import org.tavall.agentwebmcp.operation.OperationInvoker;
+import org.tavall.dependency.IDependencyAccess;
+import org.tavall.dependency.annotations.DelegatesTo;
+import org.tavall.internal.utils.concurrent.AsyncTask;
 
-import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -16,35 +18,18 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
+import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Pattern;
 
-public final class LocalJobProvider implements JobProvider {
+@DelegatesTo(JobProvider.class)
+public final class LocalJobProvider implements JobProvider, IDependencyAccess {
     private static final Pattern JOB_ID = Pattern.compile("job-[a-f0-9]{12}");
 
-    private final ObjectMapper objectMapper;
-    private final JobStore jobStore;
     private final AtomicBoolean recovered = new AtomicBoolean();
     private final Object recoveryLock = new Object();
-
-    private LocalJobProvider(Builder builder) {
-        this.objectMapper = Objects.requireNonNull(builder.objectMapper, "objectMapper");
-        this.jobStore = builder.jobStore == null
-                ? FileJobStore.builder()
-                        .objectMapper(objectMapper)
-                        .dataDirectory(Objects.requireNonNull(builder.dataDirectory, "dataDirectory"))
-                        .build()
-                : builder.jobStore;
-    }
-
-    public static Builder builder() {
-        return new Builder();
-    }
 
     @Override
     public String providerName() {
@@ -57,7 +42,7 @@ public final class LocalJobProvider implements JobProvider {
             throw new IllegalArgumentException("limit must be between 1 and 1000");
         }
         ensureRecovered();
-        return jobStore.list().stream()
+        return jobRepository().list().stream()
                 .sorted(Comparator.comparing(JobRecord::createdAt).reversed())
                 .limit(limit)
                 .map(LocalJobProvider::summary)
@@ -67,7 +52,7 @@ public final class LocalJobProvider implements JobProvider {
     @Override
     public JobDetails inspectJob(String jobId) {
         ensureRecovered();
-        return details(jobStore.read(requireJobId(jobId)));
+        return details(jobRepository().read(requireJobId(jobId)));
     }
 
     @Override
@@ -76,7 +61,7 @@ public final class LocalJobProvider implements JobProvider {
             throw new IllegalArgumentException("lines must be between 1 and 1000");
         }
         ensureRecovered();
-        JobRecord job = jobStore.read(requireJobId(jobId));
+        JobRecord job = jobRepository().read(requireJobId(jobId));
         List<JobLogEntry> logs = job.logs();
         int start = cursor.filter(value -> !value.isBlank())
                 .map(value -> parseCursor(value, logs.size()))
@@ -100,23 +85,26 @@ public final class LocalJobProvider implements JobProvider {
         Instant now = Instant.now();
         JobRecord queued = new JobRecord(
                 jobId, operationId, JobState.QUEUED, now, null, null, Math.toIntExact(timeout.toSeconds()),
-                input == null ? objectMapper.createObjectNode() : input.deepCopy(), null, null,
+                input == null ? objectMapper().createObjectNode() : input.deepCopy(), null, null,
                 List.of(new JobLogEntry(now, "INFO", "Queued operation " + operationId))
         );
-        jobStore.write(queued);
-        Thread.ofVirtual().name("agent-webmcp-" + jobId).start(() -> executeJob(jobId, operationInvoker));
+        jobRepository().write(queued);
+        AsyncTask.runAsync(() -> executeJob(jobId, operationInvoker));
         return new JobSubmission(jobId, operationId, JobState.QUEUED, queued.timeoutSeconds());
     }
 
     private void executeJob(String jobId, OperationInvoker operationInvoker) {
-        JobRecord running = jobStore.update(jobId, queued -> {
+        JobRecord running = jobRepository().update(jobId, queued -> {
             Instant now = Instant.now();
             return transition(queued, JobState.RUNNING, now, null, null, null,
                     new JobLogEntry(now, "INFO", "Executing operation with timeout " + queued.timeoutSeconds() + "s"));
         });
 
-        ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
-        Future<OperationExecution> future = executor.submit(() -> operationInvoker.execute(running.operationId(), running.input()));
+        FutureTask<OperationExecution> future = new FutureTask<>(
+                () -> operationInvoker.execute(running.operationId(), running.input())
+        );
+        Thread worker = AsyncTask.namingThreadFactory("agent-webmcp-job").newThread(future);
+        worker.start();
         try {
             OperationExecution execution = future.get(running.timeoutSeconds(), TimeUnit.SECONDS);
             if (execution.status() == OperationExecutionStatus.SUCCESS) {
@@ -139,13 +127,11 @@ public final class LocalJobProvider implements JobProvider {
                     ? "Operation execution failed"
                     : exception.getCause().getMessage();
             finish(jobId, JobState.FAILED, null, message, "ERROR");
-        } finally {
-            executor.shutdownNow();
         }
     }
 
     private void finish(String jobId, JobState state, OperationExecution execution, String failureReason, String level) {
-        jobStore.update(jobId, current -> {
+        jobRepository().update(jobId, current -> {
             Instant now = Instant.now();
             String message = switch (state) {
                 case SUCCEEDED -> "Operation completed successfully";
@@ -166,9 +152,9 @@ public final class LocalJobProvider implements JobProvider {
             if (!recovered.compareAndSet(false, true)) {
                 return;
             }
-            for (JobRecord job : jobStore.list()) {
+            for (JobRecord job : jobRepository().list()) {
                 if (job.state() == JobState.QUEUED || job.state() == JobState.RUNNING) {
-                    jobStore.update(job.id(), current -> {
+                    jobRepository().update(job.id(), current -> {
                         Instant now = Instant.now();
                         return transition(current, JobState.FAILED, current.startedAt(), now, current.execution(),
                                 "Runtime stopped before job completed",
@@ -177,6 +163,14 @@ public final class LocalJobProvider implements JobProvider {
                 }
             }
         }
+    }
+
+    private ObjectMapper objectMapper() {
+        return getInstance(ObjectMapper.class);
+    }
+
+    private JobRepository jobRepository() {
+        return getInstance(JobRepository.class);
     }
 
     private static JobRecord transition(
@@ -219,34 +213,6 @@ public final class LocalJobProvider implements JobProvider {
             return cursor;
         } catch (NumberFormatException exception) {
             throw new IllegalArgumentException("cursor must be a numeric job log offset");
-        }
-    }
-
-    public static final class Builder {
-        private ObjectMapper objectMapper;
-        private Path dataDirectory;
-        private JobStore jobStore;
-
-        private Builder() {
-        }
-
-        public Builder objectMapper(ObjectMapper objectMapper) {
-            this.objectMapper = objectMapper;
-            return this;
-        }
-
-        public Builder dataDirectory(Path dataDirectory) {
-            this.dataDirectory = dataDirectory;
-            return this;
-        }
-
-        public Builder jobStore(JobStore jobStore) {
-            this.jobStore = jobStore;
-            return this;
-        }
-
-        public LocalJobProvider build() {
-            return new LocalJobProvider(this);
         }
     }
 }
