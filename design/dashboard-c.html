@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Agent WebMCP — Dashboard C / Attention Board</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body class="variant-c">
+<div class="shell">
+<header class="topbar">
+  <div class="brand"><div class="brandmark">AW</div><div class="brandtext">Agent WebMCP</div></div>
+  <div class="top-divider"></div>
+  <nav class="c-target-tabs">
+    <button class="c-target-tab active" data-select-group="target-c"><span class="dot good"></span>forge-01</button>
+    <button class="c-target-tab" data-select-group="target-c"><span class="dot warn"></span>edge-lab</button>
+    <button class="c-target-tab" data-select-group="target-c"><span class="dot good"></span>workstation</button>
+    <button class="c-target-tab" data-action="Target browser opened">+ 3 targets</button>
+  </nav>
+  <div class="grow"></div>
+  <div class="top-actions"><span class="badge good"><span class="dot good"></span>WebMCP · document.modelContext · 18</span><span class="badge danger"><span class="dot bad"></span>NO_AUTH</span><button class="icon-button" data-action="Settings opened">⋯</button></div>
+</header>
+<main class="c-main">
+  <section class="attention-strip">
+    <div class="attention-primary"><div class="attention-symbol">!</div><div><div class="eyebrow" style="color:#a3777a;margin-bottom:5px">Needs attention</div><h2>artifact-worker is degraded</h2><p>CPU saturation crossed the target threshold and the last restart operation failed verification.</p></div><button class="button" style="margin-left:auto" data-action="artifact-worker failure inspected">Inspect</button></div>
+    <div class="attention-cell"><div class="metric-value">10 <span class="muted small">/ 12</span></div><div class="metric-label">Services healthy</div><div class="status-text tiny" style="margin-top:8px;color:#779884"><span class="dot good"></span>83% healthy</div></div>
+    <div class="attention-cell"><div class="metric-value">3</div><div class="metric-label">Jobs in view</div><div class="status-text tiny" style="margin-top:8px;color:#988561"><span class="dot warn"></span>1 running</div></div>
+    <div class="attention-cell"><div class="metric-value">18</div><div class="metric-label">Catalog operations</div><div class="status-text tiny" style="margin-top:8px;color:#748d7e"><span class="dot good"></span>18 exposed to browser</div></div>
+  </section>
+
+  <section class="c-workspace">
+    <div class="service-board">
+      <div class="board-head"><div><div class="section-title">Service board</div><div class="tiny muted" style="margin-top:3px">forge-01 · grouped by operational role</div></div><div class="input-wrap"><span class="quiet">⌕</span><input data-primary-search data-filter-input=".service-tile" placeholder="Filter services"><span class="kbd">/</span></div><button class="button ghost" data-action="Target inspection opened">Target details</button></div>
+
+      <div class="cluster"><div class="cluster-title"><span>Ingress & control</span><span class="cluster-count">3</span></div><div class="board-grid">
+        <div class="service-tile selected" data-select-group="service-c"><div class="tile-head"><span class="tile-glyph">AW</span><div><div class="tile-name">agent-webmcp</div><div class="tile-meta mono">systemd · :7188</div></div><span class="tile-status dot good"></span></div><div class="tile-stats"><div class="tile-stat"><b>4.8%</b><span>CPU</span></div><div class="tile-stat"><b>188 MB</b><span>memory</span></div><div class="tile-stat"><b>2h 14m</b><span>uptime</span></div></div><div class="tile-actions"><button data-action="Inspect agent-webmcp">Inspect</button><button data-action="Restart agent-webmcp prepared">Restart</button><button data-action="Logs for agent-webmcp opened">Logs</button></div></div>
+        <div class="service-tile" data-select-group="service-c"><div class="tile-head"><span class="tile-glyph">NGX</span><div><div class="tile-name">gateway</div><div class="tile-meta mono">nginx · :443</div></div><span class="tile-status dot good"></span></div><div class="tile-stats"><div class="tile-stat"><b>1.2%</b><span>CPU</span></div><div class="tile-stat"><b>44 MB</b><span>memory</span></div><div class="tile-stat"><b>6d 3h</b><span>uptime</span></div></div><div class="tile-actions"><button data-action="Inspect gateway">Inspect</button><button data-action="Reload gateway prepared">Reload</button><button data-action="Logs for gateway opened">Logs</button></div></div>
+        <div class="service-tile" data-select-group="service-c"><div class="tile-head"><span class="tile-glyph">DIR</span><div><div class="tile-name">target-director</div><div class="tile-meta mono">native · :7190</div></div><span class="tile-status dot good"></span></div><div class="tile-stats"><div class="tile-stat"><b>0.9%</b><span>CPU</span></div><div class="tile-stat"><b>82 MB</b><span>memory</span></div><div class="tile-stat"><b>6d 3h</b><span>uptime</span></div></div><div class="tile-actions"><button data-action="Inspect target-director">Inspect</button><button data-action="Restart target-director prepared">Restart</button><button data-action="Metrics for target-director opened">Metrics</button></div></div>
+      </div></div>
+
+      <div class="cluster"><div class="cluster-title"><span>Data & workers</span><span class="cluster-count">4</span></div><div class="board-grid">
+        <div class="service-tile problem" data-select-group="service-c"><div class="tile-head"><span class="tile-glyph">WRK</span><div><div class="tile-name">artifact-worker</div><div class="tile-meta mono">systemd · worker</div></div><span class="tile-status dot bad"></span></div><div class="tile-stats"><div class="tile-stat"><b style="color:#dc9696">72.4%</b><span>CPU</span></div><div class="tile-stat"><b>1.4 GB</b><span>memory</span></div><div class="tile-stat"><b>18m</b><span>uptime</span></div></div><div class="tile-actions"><button data-action="Inspect artifact-worker">Inspect</button><button data-action="Restart artifact-worker prepared">Restart</button><button data-action="Failure evidence opened">Evidence</button></div></div>
+        <div class="service-tile" data-select-group="service-c"><div class="tile-head"><span class="tile-glyph">PG</span><div><div class="tile-name">postgresql</div><div class="tile-meta mono">systemd · :5432</div></div><span class="tile-status dot good"></span></div><div class="tile-stats"><div class="tile-stat"><b>8.1%</b><span>CPU</span></div><div class="tile-stat"><b>622 MB</b><span>memory</span></div><div class="tile-stat"><b>6d 3h</b><span>uptime</span></div></div><div class="tile-actions"><button data-action="Inspect postgresql">Inspect</button><button data-action="Metrics for postgresql opened">Metrics</button><button data-action="Logs for postgresql opened">Logs</button></div></div>
+        <div class="service-tile" data-select-group="service-c"><div class="tile-head"><span class="tile-glyph">RDS</span><div><div class="tile-name">redis</div><div class="tile-meta mono">systemd · :6379</div></div><span class="tile-status dot good"></span></div><div class="tile-stats"><div class="tile-stat"><b>2.4%</b><span>CPU</span></div><div class="tile-stat"><b>126 MB</b><span>memory</span></div><div class="tile-stat"><b>6d 3h</b><span>uptime</span></div></div><div class="tile-actions"><button data-action="Inspect redis">Inspect</button><button data-action="Metrics for redis opened">Metrics</button><button data-action="Logs for redis opened">Logs</button></div></div>
+      </div></div>
+    </div>
+
+    <aside class="c-inspector">
+      <div class="card catalog-card"><div class="section-head"><div><div class="section-title">WebMCP catalog</div><div class="tiny muted" style="margin-top:3px">Browser-facing projection</div></div><button class="icon-button" style="width:29px;height:29px" data-action="Catalog inspector opened">↗</button></div><div class="catalog-status"><span class="dot good"></span><div class="catalog-number">18</div><div class="catalog-copy">registered<br>18 currently exposed</div></div><div class="tool-list"><div class="tool-row"><span class="tool-name">target.inspect</span><span class="tool-kind">read</span></div><div class="tool-row"><span class="tool-name">service.inspect</span><span class="tool-kind">read</span></div><div class="tool-row"><span class="tool-name">service.restart</span><span class="tool-kind" style="color:#a97b7b">mutate</span></div><div class="tool-row"><span class="tool-name">service.logs</span><span class="tool-kind">read</span></div><div class="tool-row"><span class="tool-name">job.execute</span><span class="tool-kind" style="color:#a97b7b">mutate</span></div></div></div>
+      <div class="card c-jobs"><div class="section-head"><div><div class="section-title">Jobs & activity</div><div class="tiny muted" style="margin-top:3px">Recent bounded work</div></div><span class="badge warn">1 active</span></div><div class="c-job"><span class="dot warn"></span><div><div class="name mono">job-7e31</div><div class="desc">artifact-worker diagnostics · 64%</div></div><span class="time">now</span></div><div class="c-job"><span class="dot good"></span><div><div class="name mono">job-79af</div><div class="desc">gateway reload · verified</div></div><span class="time">2m</span></div><div class="c-job"><span class="dot bad"></span><div><div class="name mono">job-72d0</div><div class="desc">worker restart · failed verification</div></div><span class="time">14m</span></div><div class="c-job"><span class="dot good"></span><div><div class="name mono">service.inspect</div><div class="desc">agent-webmcp · success · 41 ms</div></div><span class="time">22m</span></div></div>
+      <div class="c-footer-warning"><strong style="color:#c08b8f">NO_AUTH active.</strong> Clients that reach this endpoint can invoke exposed mutating operations. Keep it behind the trusted tunnel you control.</div>
+    </aside>
+  </section>
+</main>
+</div>
+<div class="fixture-tag">DESIGN FIXTURE · design-only data</div><div class="toast"></div>
+<script src="dashboard.js"></script>
+</body>
+</html>

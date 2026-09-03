@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Agent WebMCP — Dashboard B / Operation Command Surface</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body class="variant-b">
+<div class="shell">
+<header class="topbar">
+  <div class="brand"><div class="brandmark">AW</div><div class="brandtext">Agent WebMCP</div></div>
+  <div class="top-divider"></div>
+  <div class="b-status-strip"><span class="badge good"><span class="dot good"></span>document.modelContext</span><span class="tiny quiet mono">catalog ops-6f2c1b · 18 registered</span></div>
+  <div class="grow"></div>
+  <div class="top-actions"><span class="badge danger"><span class="dot bad"></span>NO_AUTH</span><button class="button ghost" data-action="Catalog inspector opened">Catalog</button><button class="icon-button" data-action="Settings opened">⋯</button></div>
+</header>
+<main class="b-main">
+  <section class="b-contextbar">
+    <span class="eyebrow">Execution context</span><span class="path-sep">/</span>
+    <div class="context-path"><span class="dot good"></span><strong>forge-01</strong><span class="path-sep">›</span><span class="muted">agent-webmcp</span></div>
+    <span class="badge">local · linux</span><span class="badge good">healthy</span>
+    <div class="input-wrap"><span class="quiet">⌕</span><input placeholder="Switch target or service"><span class="kbd">⌘K</span></div>
+  </section>
+
+  <section class="b-workbench">
+    <div class="command-surface">
+      <div class="command-search"><div class="input-wrap hero-search"><span class="quiet" style="font-size:18px">⌕</span><input data-primary-search data-filter-input=".command-tile" placeholder="Find an operation: restart, inspect logs, list targets…"><span class="kbd">/</span></div></div>
+      <div class="command-groups">
+        <div class="command-group"><div class="command-group-title"><span>Context & inspection</span><span class="grow sep"></span><span>6 operations</span></div><div class="command-grid">
+          <div class="command-tile row-hover" data-select-group="command-b"><div class="command-top"><span class="dot info"></span><span class="command-key">target.inspect</span></div><p>Inspect target identity, runtime, capabilities, and provider metadata.</p><div class="command-flags"><span class="flag">read only</span><span class="flag">WebMCP</span></div></div>
+          <div class="command-tile selected" data-select-group="command-b"><div class="command-top"><span class="dot good"></span><span class="command-key">service.inspect</span></div><p>Read authoritative state and runtime metadata for the selected service.</p><div class="command-flags"><span class="flag">read only</span><span class="flag">WebMCP</span></div></div>
+          <div class="command-tile" data-select-group="command-b"><div class="command-top"><span class="dot info"></span><span class="command-key">service.logs</span></div><p>Read bounded recent output and receive a continuation cursor.</p><div class="command-flags"><span class="flag">read only</span><span class="flag">bounded</span></div></div>
+        </div></div>
+        <div class="command-group"><div class="command-group-title"><span>Lifecycle control</span><span class="grow sep"></span><span>4 operations</span></div><div class="command-grid">
+          <div class="command-tile" data-select-group="command-b"><div class="command-top"><span class="dot good"></span><span class="command-key">service.start</span></div><p>Request service start and return verified provider lifecycle evidence.</p><div class="command-flags"><span class="flag mutate">mutates</span><span class="flag">WebMCP</span></div></div>
+          <div class="command-tile" data-select-group="command-b"><div class="command-top"><span class="dot warn"></span><span class="command-key">service.restart</span></div><p>Perform a bounded restart against the current exact target context.</p><div class="command-flags"><span class="flag mutate">mutates</span><span class="flag">verified</span></div></div>
+          <div class="command-tile" data-select-group="command-b"><div class="command-top"><span class="dot warn"></span><span class="command-key">service.reload</span></div><p>Request provider-supported reload without inventing shell semantics.</p><div class="command-flags"><span class="flag mutate">mutates</span><span class="flag">conditional</span></div></div>
+        </div></div>
+        <div class="command-group"><div class="command-group-title"><span>Jobs & system</span><span class="grow sep"></span><span>8 operations</span></div><div class="command-grid">
+          <div class="command-tile" data-select-group="command-b"><div class="command-top"><span class="dot info"></span><span class="command-key">job.execute</span></div><p>Execute one bounded catalog action and track it as a durable job.</p><div class="command-flags"><span class="flag mutate">mutates</span><span class="flag">bounded</span></div></div>
+          <div class="command-tile" data-select-group="command-b"><div class="command-top"><span class="dot info"></span><span class="command-key">job.inspect</span></div><p>Inspect state, exact context, result classification, and evidence.</p><div class="command-flags"><span class="flag">read only</span><span class="flag">WebMCP</span></div></div>
+          <div class="command-tile" data-select-group="command-b"><div class="command-top"><span class="dot info"></span><span class="command-key">system.status</span></div><p>Read Agent WebMCP runtime, provider, catalog, and connection state.</p><div class="command-flags"><span class="flag">read only</span><span class="flag">WebMCP</span></div></div>
+        </div></div>
+      </div>
+    </div>
+
+    <aside class="execute-panel">
+      <div class="execute-head"><div class="execute-icon">◎</div><div><div class="execute-title">service.inspect</div><div class="execute-desc">Canonical catalog operation · read only</div></div><span class="badge good" style="margin-left:auto">available</span></div>
+      <div class="sep" style="margin:14px 0"></div>
+      <div class="eyebrow">Resolved input</div>
+      <div class="form-section">
+        <div class="field"><label><span>targetId</span><span class="mono quiet">string</span></label><div class="selectish"><span class="mono">forge-01</span><span class="quiet">⌄</span></div></div>
+        <div class="field"><label><span>serviceId</span><span class="mono quiet">string</span></label><div class="selectish"><span class="mono">agent-webmcp</span><span class="quiet">⌄</span></div></div>
+        <div class="field"><label><span>includeMetrics</span><span class="mono quiet">boolean</span></label><div class="selectish"><span>true</span><span class="quiet">⌄</span></div></div>
+      </div>
+      <div class="soft-card" style="padding:11px;margin-top:13px"><div class="eyebrow">Projected surfaces</div><div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:9px"><span class="badge">Console</span><span class="badge">CLI</span><span class="badge">HTTP</span><span class="badge good">WebMCP</span></div><div class="tiny muted" style="margin-top:9px;line-height:1.45">Same operation identity and executor; transport adapters only shape discovery and result rendering.</div></div>
+      <div class="impact-box"><strong>NO_AUTH context.</strong> This operation is read-only, but the same exposed endpoint also contains mutating operations. Tunnel exposure is your security boundary.</div>
+      <div class="execute-actions"><button class="button ghost" data-action="Operation schema opened">View schema</button><button class="button primary" data-action="service.inspect executed against forge-01 / agent-webmcp">Execute</button></div>
+      <div class="sep" style="margin:16px 0 12px"></div>
+      <div class="section-head"><div class="section-title">Last result</div><span class="tiny quiet">8s ago</span></div>
+      <div class="soft-card" style="padding:10px"><div class="status-text tiny"><span class="dot good"></span><span>SUCCESS · 41 ms</span></div><div class="mono tiny muted" style="margin-top:8px;line-height:1.55">state: running<br>provider: systemd<br>pid: 18742<br>catalog: ops-6f2c1b</div></div>
+    </aside>
+  </section>
+
+  <section class="b-timeline">
+    <div class="card activity-card"><div class="section-head"><div><div class="section-title">Recent operations</div><div class="tiny muted" style="margin-top:3px">Across the current target context</div></div><button class="button ghost" data-action="Activity history opened">History</button></div><div class="timeline-list">
+      <div class="timeline-event"><div class="event-top"><span class="event-op">service.inspect</span><span class="dot good"></span></div><div class="event-detail">agent-webmcp · success</div><div class="event-time">8 seconds ago</div></div>
+      <div class="timeline-event"><div class="event-top"><span class="event-op">service.reload</span><span class="dot good"></span></div><div class="event-detail">gateway · verified</div><div class="event-time">2 minutes ago</div></div>
+      <div class="timeline-event"><div class="event-top"><span class="event-op">job.logs</span><span class="dot warn"></span></div><div class="event-detail">job-7e31 · running</div><div class="event-time">5 minutes ago</div></div>
+      <div class="timeline-event"><div class="event-top"><span class="event-op">service.restart</span><span class="dot bad"></span></div><div class="event-detail">artifact-worker · failed</div><div class="event-time">14 minutes ago</div></div>
+    </div></div>
+    <div class="card jobs-summary"><div class="section-head"><div class="section-title">Jobs</div><span class="badge warn">1 active</span></div><div class="job-bar"><span></span></div><div class="job-compact"><span class="dot warn"></span><span class="mono">job-7e31</span><span class="grow">worker diagnostics</span><span class="quiet">64%</span></div><div class="job-compact"><span class="dot good"></span><span class="mono">job-79af</span><span class="grow">gateway reload</span><span class="quiet">done</span></div><div class="job-compact"><span class="dot bad"></span><span class="mono">job-72d0</span><span class="grow">worker restart</span><span class="quiet">failed</span></div></div>
+  </section>
+</main>
+</div>
+<div class="fixture-tag">DESIGN FIXTURE · design-only data</div><div class="toast"></div>
+<script src="dashboard.js"></script>
+</body>
+</html>
