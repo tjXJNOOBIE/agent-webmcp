@@ -1,0 +1,4 @@
+node_modules/
+.video-tools/
+.browser-cache/
+renders/
