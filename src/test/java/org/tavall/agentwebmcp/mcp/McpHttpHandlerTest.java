@@ -49,11 +49,11 @@ class McpHttpHandlerTest {
             assertEquals(202, post(client, endpoint, sessionId, "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\",\"params\":{}}").statusCode());
             HttpResponse<String> list = post(client, endpoint, sessionId, "{\"jsonrpc\":\"2.0\",\"id\":\"tools-1\",\"method\":\"tools/list\",\"params\":{}}");
             JsonNode tools = mapper().readTree(list.body()).path("result").path("tools");
-            assertEquals(14, McpToolPolicy.exposedToolCount());
-            assertEquals(14, tools.size());
+            assertEquals(16, McpToolPolicy.exposedToolCount());
+            assertEquals(16, tools.size());
             Set<String> names = new java.util.HashSet<>();
             tools.forEach(tool -> names.add(tool.path("name").asText()));
-            assertTrue(names.containsAll(Set.of("system.status", "metrics.snapshot", "service.list", "service.inspect", "service.status", "service.logs", "service.diagnostics", "service.start", "service.stop", "service.restart", "service.reload", "job.list", "job.inspect", "job.logs")));
+            assertTrue(names.containsAll(Set.of("system.status", "metrics.snapshot", "agent.list", "agent.inspect", "service.list", "service.inspect", "service.status", "service.logs", "service.diagnostics", "service.start", "service.stop", "service.restart", "service.reload", "job.list", "job.inspect", "job.logs")));
             assertFalse(names.contains("service.add"));
             assertFalse(names.contains("service.remove"));
             assertFalse(names.contains("service.discover"));

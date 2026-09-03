@@ -8,6 +8,8 @@ public final class McpToolPolicy {
     private static final Set<String> EXPOSED_OPERATION_IDS = Set.of(
             "system.status",
             "metrics.snapshot",
+            "agent.list",
+            "agent.inspect",
             "service.list",
             "service.inspect",
             "service.status",

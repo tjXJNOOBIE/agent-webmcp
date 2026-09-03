@@ -16,9 +16,10 @@ class DefaultOperationCatalogTest {
         OperationCatalog catalog = DefaultOperationCatalog.create();
         List<String> ids = catalog.registrations().stream().map(registration -> registration.descriptor().id().value()).toList();
 
-        assertEquals(21, ids.size());
+        assertEquals(23, ids.size());
         assertTrue(ids.containsAll(List.of(
                 "system.status", "metrics.snapshot", "target.list", "target.inspect",
+                "agent.list", "agent.inspect",
                 "service.list", "service.add", "service.remove", "service.discover",
                 "service.inspect", "service.status", "service.logs", "service.diagnostics",
                 "service.start", "service.stop", "service.restart", "service.reload",

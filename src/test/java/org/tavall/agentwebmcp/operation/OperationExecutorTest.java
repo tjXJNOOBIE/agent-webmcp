@@ -88,6 +88,19 @@ class OperationExecutorTest {
     }
 
     @Test
+    void attributesAiJobToObservedPromptCapableRuntimeAgent() throws Exception {
+        try (AgentWebMcpRuntime runtime = runtime(new FakeServiceProvider(), new FakeCodexCliProvider())) {
+            enrollDemoService(runtime);
+            OperationExecution submission = runtime.executor().execute("job.execute", objectMapper.readTree(
+                    "{\"serviceId\":\"demo.service\",\"prompt\":\"inspect\",\"input\":{},\"timeoutSeconds\":5}"));
+            assertEquals(OperationExecutionStatus.SUCCESS, submission.status());
+            JobDetails job = awaitTerminal(runtime, submission.output().get("jobId").asText());
+            assertEquals(JobState.SUCCEEDED, job.state());
+            assertEquals(java.util.Optional.of("codex:local"), job.agentId());
+        }
+    }
+
+    @Test
     void rejectsAiJobWhenCodexIsUnavailable() throws Exception {
         FakeCodexCliProvider codex = new FakeCodexCliProvider();
         codex.setAvailable(false);

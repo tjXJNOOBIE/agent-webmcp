@@ -9,6 +9,8 @@ public final class WebMcpToolPolicy {
     private static final Set<String> EXPOSED_OPERATION_IDS = Set.of(
             "system.status",
             "metrics.snapshot",
+            "agent.list",
+            "agent.inspect",
             "service.list",
             "service.add",
             "service.remove",

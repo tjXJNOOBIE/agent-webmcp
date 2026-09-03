@@ -12,12 +12,14 @@ Submission/implementation evidence, dated commit provenance, and judge verificat
 
 ## Current capabilities
 
-The canonical runtime owns **21 operations / 9 mutating**. WebMCP exposes an explicit **16-tool** browser projection, while the narrower ChatGPT/MCP app exposes **14 tools** for health/metrics, managed-service observability/lifecycle, diagnostics, and read-only job state.
+The canonical runtime owns **23 operations / 9 mutating**. WebMCP exposes an explicit **18-tool** browser projection, while the narrower ChatGPT/MCP app exposes **16 tools** for health/metrics, managed-service observability/lifecycle, diagnostics, and read-only job state.
 
 | MCP tool | Purpose | Access |
 | --- | --- | --- |
 | `system.status` | Runtime/provider/auth health summary | Read |
 | `metrics.snapshot` | JVM/OS metrics snapshot | Read |
+| `agent.list` | List observed runtime agents and heartbeat/target state | Read |
+| `agent.inspect` | Inspect one runtime agent, version, target, heartbeat, and capabilities | Read |
 | `service.list` | List services enrolled in Agent WebMCP | Read |
 | `service.inspect` | Inspect one service in detail | Read |
 | `service.status` | Read current service state | Read |
@@ -31,7 +33,7 @@ The canonical runtime owns **21 operations / 9 mutating**. WebMCP exposes an exp
 | `job.inspect` | Inspect one job and its linked agent/result | Read |
 | `job.logs` | Read bounded job lifecycle logs | Read |
 
-The canonical catalog is intentionally larger than either machine-facing projection. WebMCP exposes 16 explicitly allowed operations. MCP is narrower at 14 tools: it includes `service.diagnostics`, service lifecycle/observability, system metrics/status, and read-only durable job state, while keeping discovery, job execution/cancellation, target workflows, and managed-inventory mutation outside the remote app surface.
+The canonical catalog is intentionally larger than either machine-facing projection. WebMCP exposes 18 explicitly allowed operations, including read-only agent inventory/inspection. MCP is narrower at 16 tools: it includes `service.diagnostics`, service lifecycle/observability, system metrics/status, read-only runtime-agent state, and read-only durable job state, while keeping discovery, job execution/cancellation, target workflows, and managed-inventory mutation outside the remote app surface.
 
 Managed-service enrollment remains the lifecycle authority boundary. `service.inspect`, `service.status`, `service.logs`, `service.diagnostics`, `service.start`, `service.stop`, `service.restart`, and `service.reload` reject unenrolled IDs with `SERVICE_NOT_MANAGED` before provider access. `service.discover` can register deterministic custom/operator candidates; optional Codex-assisted discovery is explicit, read-only, accepts only service IDs, and re-inspects every returned ID through the real provider.
 
@@ -172,7 +174,7 @@ flowchart TD
     UserSvc --> Health[GET 127.0.0.1:7188/health]
     SystemSvc --> Health
     Health --> MCPInit[POST initialize to 127.0.0.1:7188/mcp]
-    MCPInit --> Tools[tools/list returns 13 MCP tools]
+    MCPInit --> Tools[tools/list returns 16 MCP tools]
 ```
 
 ## Connect through OpenAI Secure MCP Tunnel
@@ -249,7 +251,7 @@ Current ChatGPT custom-app setup scans the MCP server tools and creates a draft 
 6. Name the app **Agent WebMCP**.
 7. Choose **Tunnel** and select or paste the created `tunnel_...` ID.
 8. Use **No Auth** for the MCP target. The tunnel runtime key belongs to `tunnel-client`, not to ChatGPT app fields.
-9. Click **Scan Tools**. The scan should discover exactly the 13 app-facing tools listed above.
+9. Click **Scan Tools**. The scan should discover exactly the 16 app-facing tools listed above.
 10. Click **Create**. The app should appear as a draft/development app.
 11. Start a new chat with Agent WebMCP selected and test a read-only call first, for example: `Show the current Agent WebMCP system status.`
 12. Then test logs: `Show the latest logs for demo.service.`
@@ -261,8 +263,8 @@ flowchart TD
     TunnelReady --> CreateApp[ChatGPT Apps → Create]
     CreateApp --> TunnelMode[Connection: Tunnel + tunnel_id]
     TunnelMode --> Scan[Scan Tools]
-    Scan --> ThirteenTools[13 bounded operations discovered]
-    ThirteenTools --> Draft[Create draft app]
+    Scan --> SixteenTools[16 bounded operations discovered]
+    SixteenTools --> Draft[Create draft app]
     Draft --> ReadTest[system.status / service.status / service.logs]
     ReadTest --> WriteTest[service.restart on safe test service]
     WriteTest --> Verify[service.status + service.logs verification]
@@ -315,7 +317,7 @@ flowchart TD
     G --> H[tunnel-client doctor]
     H --> I[tunnel-client run]
     I --> J[Create ChatGPT custom app in Tunnel mode]
-    J --> K[Scan 14 bounded MCP tools]
+    J --> K[Scan 16 bounded MCP tools]
     K --> L[Test read-only health/log operations]
     L --> M[Test service lifecycle action on safe service]
     M --> N[Verify observed service state/logs]

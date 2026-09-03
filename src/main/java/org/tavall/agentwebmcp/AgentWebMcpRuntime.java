@@ -7,6 +7,8 @@ import org.tavall.agentwebmcp.operation.OperationCatalog;
 import org.tavall.agentwebmcp.operation.OperationContext;
 import org.tavall.agentwebmcp.operation.OperationExecutor;
 import org.tavall.agentwebmcp.operation.OperationInvoker;
+import org.tavall.agentwebmcp.provider.agent.AgentProvider;
+import org.tavall.agentwebmcp.provider.agent.LocalAgentProvider;
 import org.tavall.agentwebmcp.provider.codex.CodexCliProvider;
 import org.tavall.agentwebmcp.provider.codex.LocalCodexCliProvider;
 import org.tavall.agentwebmcp.provider.job.FileJobRepository;
@@ -96,6 +98,7 @@ public final class AgentWebMcpRuntime implements IDependencyAccess, AutoCloseabl
         private MetricsProvider metricsProvider;
         private JobProvider jobProvider;
         private CodexCliProvider codexCliProvider;
+        private AgentProvider agentProvider;
         private ICustomScheduler scheduler;
         private Path dataDirectory;
 
@@ -134,6 +137,11 @@ public final class AgentWebMcpRuntime implements IDependencyAccess, AutoCloseabl
 
         public Builder codexCliProvider(CodexCliProvider codexCliProvider) {
             this.codexCliProvider = Objects.requireNonNull(codexCliProvider, "codexCliProvider");
+            return this;
+        }
+
+        public Builder agentProvider(AgentProvider agentProvider) {
+            this.agentProvider = Objects.requireNonNull(agentProvider, "agentProvider");
             return this;
         }
 
@@ -190,6 +198,9 @@ public final class AgentWebMcpRuntime implements IDependencyAccess, AutoCloseabl
                     : codexCliProvider;
             dependencies.registerInstance(CodexCliProvider.class, resolvedCodexCliProvider);
 
+            AgentProvider resolvedAgentProvider = agentProvider == null ? new LocalAgentProvider() : agentProvider;
+            dependencies.registerInstance(AgentProvider.class, resolvedAgentProvider);
+
             JobProvider resolvedJobProvider = jobProvider;
             if (resolvedJobProvider == null) {
                 JobRepository repository = FileJobRepository.builder()
@@ -213,6 +224,7 @@ public final class AgentWebMcpRuntime implements IDependencyAccess, AutoCloseabl
                     dependencies.getInstance(MetricsProvider.class),
                     dependencies.getInstance(JobProvider.class),
                     dependencies.getInstance(CodexCliProvider.class),
+                    dependencies.getInstance(AgentProvider.class),
                     dependencies.getInstance(OperationInvoker.class)
             );
             dependencies.registerInstance(OperationContext.class, context);

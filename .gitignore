@@ -10,3 +10,4 @@ playwright-report/
 .validation/
 .tavall-source-deps/
 .playwright-browsers/
+.npm-cache/

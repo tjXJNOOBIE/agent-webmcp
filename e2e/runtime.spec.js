@@ -7,7 +7,7 @@ test.beforeEach(async ({ page }) => {
   await page.addInitScript({ path: polyfill });
 });
 
-test('health and canonical catalog expose the 21-operation runtime contract', async ({ request }) => {
+test('health and canonical catalog expose the 23-operation runtime contract', async ({ request }) => {
   const health = await request.get('/health');
   expect(health.ok()).toBeTruthy();
   const healthBody = await health.json();
@@ -16,7 +16,7 @@ test('health and canonical catalog expose the 21-operation runtime contract', as
     webServer: 'jdk-httpserver',
     transport: 'http-json',
     authMode: 'NO_AUTH',
-    operationCount: 21,
+    operationCount: 23,
     jobProvider: 'local-durable-jobs',
     metricsProvider: 'jvm-os-mxbean'
   });
@@ -24,17 +24,17 @@ test('health and canonical catalog expose the 21-operation runtime contract', as
   const catalog = await request.get('/api/v1/operations');
   expect(catalog.ok()).toBeTruthy();
   const operations = (await catalog.json()).operations;
-  expect(operations).toHaveLength(21);
+  expect(operations).toHaveLength(23);
   const ids = operations.map((operation) => operation.id);
   expect(ids).toEqual(expect.arrayContaining([
-    'service.discover', 'service.diagnostics', 'job.execute', 'job.cancel'
+    'agent.list', 'agent.inspect', 'service.discover', 'service.diagnostics', 'job.execute', 'job.cancel'
   ]));
   expect(operations.filter((operation) => operation.access === 'MUTATING')).toHaveLength(9);
-  expect(operations.filter((operation) => operation.surfaces?.includes('WEBMCP'))).toHaveLength(16);
-  expect(operations.filter((operation) => operation.surfaces?.includes('MCP'))).toHaveLength(14);
+  expect(operations.filter((operation) => operation.surfaces?.includes('WEBMCP'))).toHaveLength(18);
+  expect(operations.filter((operation) => operation.surfaces?.includes('MCP'))).toHaveLength(16);
 });
 
-test('WebMCP registers exactly the approved 16-tool browser projection', async ({ page }) => {
+test('WebMCP registers exactly the approved 18-tool browser projection', async ({ page }) => {
   await page.goto('/');
   await page.waitForFunction(() => window.__agentWebMcp?.state === 'ready');
 
@@ -46,9 +46,9 @@ test('WebMCP registers exactly the approved 16-tool browser projection', async (
     return { names: tools.map((candidate) => candidate.name), output: JSON.parse(raw) };
   });
 
-  expect(result.names).toHaveLength(16);
+  expect(result.names).toHaveLength(18);
   expect(result.names).toEqual(expect.arrayContaining([
-    'system.status', 'metrics.snapshot', 'service.add', 'service.remove',
+    'system.status', 'metrics.snapshot', 'agent.list', 'agent.inspect', 'service.add', 'service.remove',
     'service.diagnostics', 'job.list', 'job.inspect', 'job.logs'
   ]));
   expect(result.names).not.toContain('service.discover');
@@ -94,7 +94,7 @@ test('unknown operations are rejected instead of falling through to process exec
   expect((await response.json()).error.code).toBe('OPERATION_NOT_FOUND');
 });
 
-test('Streamable HTTP MCP exposes exactly 14 bounded tools', async ({ request }) => {
+test('Streamable HTTP MCP exposes exactly 16 bounded tools', async ({ request }) => {
   const initialize = await request.post('/mcp', {
     headers: {
       accept: 'application/json, text/event-stream',
@@ -121,9 +121,9 @@ test('Streamable HTTP MCP exposes exactly 14 bounded tools', async ({ request })
   });
   expect(toolsResponse.ok()).toBeTruthy();
   const names = (await toolsResponse.json()).result.tools.map((tool) => tool.name);
-  expect(names).toHaveLength(14);
+  expect(names).toHaveLength(16);
   expect(names).toEqual(expect.arrayContaining([
-    'system.status', 'service.logs', 'service.diagnostics', 'service.restart',
+    'system.status', 'agent.list', 'agent.inspect', 'service.logs', 'service.diagnostics', 'service.restart',
     'job.list', 'job.inspect', 'job.logs'
   ]));
   for (const hidden of ['service.add', 'service.remove', 'service.discover', 'job.execute', 'job.cancel', 'target.list', 'target.inspect']) {

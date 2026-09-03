@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 cd "$ROOT"
 export PLAYWRIGHT_BROWSERS_PATH="$ROOT/.playwright-browsers"
+export NPM_CONFIG_CACHE="$ROOT/.npm-cache"
 
 bash scripts/quality-preflight.sh --print
 bash scripts/ci/prepare-tavall-sources

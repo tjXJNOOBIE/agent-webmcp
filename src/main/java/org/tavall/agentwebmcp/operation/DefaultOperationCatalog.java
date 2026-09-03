@@ -1,5 +1,7 @@
 package org.tavall.agentwebmcp.operation;
 
+import org.tavall.agentwebmcp.operation.handler.AgentInspectOperation;
+import org.tavall.agentwebmcp.operation.handler.AgentListOperation;
 import org.tavall.agentwebmcp.operation.handler.JobCancelOperation;
 import org.tavall.agentwebmcp.operation.handler.JobExecuteOperation;
 import org.tavall.agentwebmcp.operation.handler.JobInspectOperation;
@@ -21,6 +23,7 @@ import org.tavall.agentwebmcp.operation.handler.ServiceStopOperation;
 import org.tavall.agentwebmcp.operation.handler.SystemStatusOperation;
 import org.tavall.agentwebmcp.operation.handler.TargetInspectOperation;
 import org.tavall.agentwebmcp.operation.handler.TargetListOperation;
+import org.tavall.agentwebmcp.operation.input.AgentInspectInput;
 import org.tavall.agentwebmcp.operation.input.EmptyInput;
 import org.tavall.agentwebmcp.operation.input.JobExecuteInput;
 import org.tavall.agentwebmcp.operation.input.JobIdInput;
@@ -43,6 +46,8 @@ public final class DefaultOperationCatalog {
         register(catalog, "metrics.snapshot", "Read a bounded JVM and operating-system metrics snapshot for the selected target.", OperationAccess.READ_ONLY, MetricsSnapshotInput.class, new MetricsSnapshotOperation());
         register(catalog, "target.list", "List targets visible to this Agent WebMCP runtime.", OperationAccess.READ_ONLY, EmptyInput.class, new TargetListOperation());
         register(catalog, "target.inspect", "Inspect one target and its runtime capabilities.", OperationAccess.READ_ONLY, TargetInspectInput.class, new TargetInspectOperation());
+        register(catalog, "agent.list", "List runtime agents with target binding, runtime version, state, and last observed heartbeat.", OperationAccess.READ_ONLY, EmptyInput.class, new AgentListOperation());
+        register(catalog, "agent.inspect", "Inspect one runtime agent, heartbeat, runtime identity, target binding, and capabilities.", OperationAccess.READ_ONLY, AgentInspectInput.class, new AgentInspectOperation());
         register(catalog, "service.list", "List services currently managed by Agent WebMCP on the selected target.", OperationAccess.READ_ONLY, ServiceListInput.class, new ServiceListOperation());
         register(catalog, "service.add", "Add an existing provider service to the Agent WebMCP managed-service inventory.", OperationAccess.MUTATING, ServiceIdInput.class, new ServiceAddOperation());
         register(catalog, "service.remove", "Remove a service from the Agent WebMCP managed-service inventory without deleting or stopping the provider unit.", OperationAccess.MUTATING, ServiceIdInput.class, new ServiceRemoveOperation());

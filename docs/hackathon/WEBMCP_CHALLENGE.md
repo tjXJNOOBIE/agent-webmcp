@@ -53,9 +53,9 @@ A September 3 validation pass compiled the current application source together w
 
 Current evidence:
 
-- Java 25 / Gradle compilation and JUnit suite: 45/45 tests passed, 0 failed.
-- Runtime Playwright suite: 6/6 passed, including the 21-operation catalog, exact 16-tool WebMCP projection, exact 14-tool MCP projection, canonical execution, metrics, managed-service authority, and unsafe-operation rejection.
-- Stateful Fleet Cockpit Playwright suite: 3/3 passed. It covers deterministic and explicit-AI discovery, Service Control logs/diagnostics/lifecycle evidence, deterministic/future/recurring/Codex jobs, execution trace and cancellation, Operations, Catalog, Activity/real-session metrics, truthful unavailable Agents state, the Target/Agent/Services/Heartbeat comparison, Settings, and 390px mobile overflow.
+- Java 25 / Gradle compilation and JUnit suite: 48/48 tests passed, 0 failed.
+- Runtime Playwright suite: 6/6 passed, including the 23-operation catalog, exact 18-tool WebMCP projection, exact 16-tool MCP projection, canonical execution, metrics, managed-service authority, and unsafe-operation rejection.
+- Stateful Fleet Cockpit Playwright suite: 3/3 passed. It covers deterministic and explicit-AI discovery, Service Control logs/diagnostics/lifecycle evidence, deterministic/future/recurring/Codex jobs, execution trace and cancellation, Operations, Catalog, Activity/real-session metrics, real installed-Codex Agent Registry state and capabilities, the Target/Agent/Services/Heartbeat comparison, Settings, and 390px mobile overflow.
 - `scripts/verify-webmcp-challenge.sh`: passed.
 - Production WebMCP JavaScript syntax and generated test polyfill syntax: passed.
 - `git diff --check`: passed.

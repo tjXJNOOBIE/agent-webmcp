@@ -13,12 +13,14 @@ Agent WebMCP owns one typed Java operation catalog. CLI, HTTP/JSON, WebMCP, MCP,
 - Tavall Logging owns runtime/application logging.
 - Provider interfaces own external authority such as systemd and the user's existing Codex CLI.
 
-The catalog contains **21 operations**, **9 mutating**:
+The catalog contains **23 operations**, **9 mutating**:
 
 - `system.status`
 - `metrics.snapshot`
 - `target.list`
 - `target.inspect`
+- `agent.list`
+- `agent.inspect`
 - `service.list`
 - `service.add`
 - `service.remove`
@@ -43,11 +45,15 @@ New operations require a stable ID, description, access classification, typed in
 
 HTTP exposes the canonical operation endpoint. Machine-facing projections are intentionally narrower.
 
-**WebMCP exposes 16 operations.** It includes bounded service inventory/observability/lifecycle plus read-only job state, but excludes `target.*`, `service.discover`, `job.execute`, and `job.cancel`. `WebMcpToolPolicy` is the explicit allowlist, and the browser registers a catalog operation only when its surfaces include `WEBMCP`.
+**WebMCP exposes 18 operations.** It includes read-only runtime-agent inventory/inspection, bounded service inventory/observability/lifecycle, plus read-only job state, but excludes `target.*`, `service.discover`, `job.execute`, and `job.cancel`. `WebMcpToolPolicy` is the explicit allowlist, and the browser registers a catalog operation only when its surfaces include `WEBMCP`.
 
-**MCP exposes 14 operations.** It includes health/metrics, managed-service observability/lifecycle including diagnostics, and read-only durable job state. It excludes `target.*`, `service.add`, `service.remove`, `service.discover`, `job.execute`, and `job.cancel`.
+**MCP exposes 16 operations.** It includes health/metrics, read-only runtime-agent inventory/inspection, managed-service observability/lifecycle including diagnostics, and read-only durable job state. It excludes `target.*`, `service.add`, `service.remove`, `service.discover`, `job.execute`, and `job.cancel`.
 
 Discovery, job creation/cancellation, target mutation, generic shell execution, arbitrary process launch, and filesystem mutation are therefore not remotely projected by default merely because the canonical HTTP runtime can perform an operator workflow.
+
+## Runtime agents
+
+`agent.list` and `agent.inspect` expose real runtime executors observed by `AgentProvider`. The default local provider reports the user-installed Codex CLI only when its provider status probe succeeds. That successful probe timestamp is the agent heartbeat observation; Agent WebMCP does not synthesize background heartbeat history. The local agent is bound to target `local`, reports its real Codex version, and advertises only capabilities Agent WebMCP actually uses (`service-job.prompt` and `service-discovery.read-only`).
 
 ## Managed services and discovery
 
@@ -72,4 +78,4 @@ A service is mandatory. Prompt and deterministic operation are mutually exclusiv
 
 ## Validation
 
-Catalog or projection changes require unit coverage plus transport/browser coverage for every affected edge. Current required invariants are 21 canonical operations, 9 mutating, 16 WebMCP, and 14 MCP. Validation must also prove hidden workflow operations remain undiscoverable through WebMCP/MCP.
+Catalog or projection changes require unit coverage plus transport/browser coverage for every affected edge. Current required invariants are 23 canonical operations, 9 mutating, 18 WebMCP, and 16 MCP. Validation must also prove hidden workflow operations remain undiscoverable through WebMCP/MCP.

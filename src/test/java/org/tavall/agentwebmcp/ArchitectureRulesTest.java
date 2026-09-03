@@ -42,6 +42,7 @@ class ArchitectureRulesTest {
     void operationHandlersStayStatelessInsteadOfCapturingDependencies() {
         List<Class<?>> handlers = List.of(
                 SystemStatusOperation.class, MetricsSnapshotOperation.class, TargetListOperation.class, TargetInspectOperation.class,
+                AgentListOperation.class, AgentInspectOperation.class,
                 ServiceListOperation.class, ServiceAddOperation.class, ServiceRemoveOperation.class, ServiceDiscoverOperation.class,
                 ServiceInspectOperation.class, ServiceStatusOperation.class, ServiceLogsOperation.class, ServiceDiagnosticsOperation.class,
                 ServiceStartOperation.class, ServiceStopOperation.class, ServiceRestartOperation.class, ServiceReloadOperation.class,

@@ -33,10 +33,12 @@ class AgentWebMcpHttpServerTest {
             assertEquals(200, health.statusCode());
             assertTrue(health.body().contains("\"webServer\":\"jdk-httpserver\""));
             assertTrue(health.body().contains("\"authMode\":\"NO_AUTH\""));
-            assertTrue(health.body().contains("\"operationCount\":21"));
+            assertTrue(health.body().contains("\"operationCount\":23"));
 
             HttpResponse<String> catalog = client.send(HttpRequest.newBuilder(URI.create(base + "/api/v1/operations")).GET().build(), HttpResponse.BodyHandlers.ofString());
             assertEquals(200, catalog.statusCode());
+            assertTrue(catalog.body().contains("agent.list"));
+            assertTrue(catalog.body().contains("agent.inspect"));
             assertTrue(catalog.body().contains("service.discover"));
             assertTrue(catalog.body().contains("service.diagnostics"));
             assertTrue(catalog.body().contains("job.cancel"));

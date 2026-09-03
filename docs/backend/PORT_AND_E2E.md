@@ -2,11 +2,11 @@
 
 ## Runtime boundary
 
-Agent WebMCP uses the JDK `HttpServer` only as a lightweight transport edge. Tavall DI owns composition, Tavall Registry owns the 21-operation catalog, Tavall Concurrency owns bounded async execution, Tavall Scheduler owns future/recurring jobs, and Tavall Logging owns runtime logging. CLI, HTTP, WebMCP, MCP, and the Fleet Cockpit all execute the same canonical handlers.
+Agent WebMCP uses the JDK `HttpServer` only as a lightweight transport edge. Tavall DI owns composition, Tavall Registry owns the 23-operation catalog, Tavall Concurrency owns bounded async execution, Tavall Scheduler owns future/recurring jobs, and Tavall Logging owns runtime logging. CLI, HTTP, WebMCP, MCP, and the Fleet Cockpit all execute the same canonical handlers.
 
 The local systemd provider runs validated argv through `ProcessBuilder`; production code never invokes shell command strings. Process stdin/stdout/stderr are bounded to 1 MiB, timeouts terminate provider processes, and interrupted job workers propagate interruption to provider execution. Metrics use JVM/OS MXBeans rather than shell utilities.
 
-The canonical catalog contains **21 operations / 9 mutating**. WebMCP projects **16** operations. Streamable HTTP MCP projects **14**. `service.discover`, `job.execute`, `job.cancel`, and target workflows are not exposed to browser agents; MCP is narrower still and excludes managed-inventory mutation.
+The canonical catalog contains **23 operations / 9 mutating**. WebMCP projects **18** operations. Streamable HTTP MCP projects **16**. `agent.list` and `agent.inspect` are read-only machine-facing projections. `service.discover`, `job.execute`, `job.cancel`, and target workflows are not exposed to browser agents; MCP is narrower still and excludes managed-inventory mutation.
 
 ## Discovery, diagnostics, and jobs
 
@@ -29,11 +29,11 @@ Tavall repositories currently do not provide Git tags matching the transitive `o
 
 Repository Playwright tests run against the real Java HTTP runtime. The browser-only WebMCP polyfill supplies `document.modelContext` in Chromium when native WebMCP is absent; production code talks only to `document.modelContext`.
 
-The runtime suite proves health/catalog identity, 21/9 counts, exact 16-tool WebMCP projection, exact 14-tool MCP projection, live metrics, managed-service authority rejection, unsafe job-input rejection, and unknown-operation rejection.
+The runtime suite proves health/catalog identity, 23/9 counts, exact 18-tool WebMCP projection, exact 16-tool MCP projection, live metrics, managed-service authority rejection, unsafe job-input rejection, and unknown-operation rejection.
 
-The stateful Fleet Cockpit suite exercises the approved Round 4/7 production surfaces with real browser behavior: deterministic and opt-in AI discovery, Service Control with bounded console/diagnostics and truthful current lifecycle evidence, Jobs Create execution summary, Jobs View history/trace/cancellation, Operations, Catalog, Activity plus current-session resource timeline, truthful unavailable Agents state, Target Switcher C with Target/Agent/Services/Heartbeat columns, Settings tabs, and document-overflow/internal-scroll acceptance at 390px.
+The stateful Fleet Cockpit suite exercises the approved Round 4/7 production surfaces with real browser behavior: deterministic and opt-in AI discovery, Service Control with bounded console/diagnostics and truthful current lifecycle evidence, Jobs Create execution summary, Jobs View history/trace/cancellation, Operations, Catalog, Activity plus current-session resource timeline, Agents A with real installed-Codex inventory, heartbeat/runtime/capability inspection, Target Switcher C with Target/Agent/Services/Heartbeat columns, Settings tabs, and document-overflow/internal-scroll acceptance at 390px.
 
-A dedicated stateful provider fixture drives the accepted Fleet Cockpit through deterministic and AI discovery, Service Control lifecycle/diagnostics/logs, immediate/future/recurring/Codex jobs, execution trace, cancellation, operation registry, projection matrix, activity/resource timeline, truthful unavailable Agents state, target comparison, Settings tabs, and mobile horizontal-overflow acceptance.
+A dedicated stateful provider fixture drives the accepted Fleet Cockpit through deterministic and AI discovery, Service Control lifecycle/diagnostics/logs, immediate/future/recurring/Codex jobs, execution trace, cancellation, operation registry, projection matrix, activity/resource timeline, real Codex-agent registry with target/heartbeat comparison, Settings tabs, and mobile horizontal-overflow acceptance.
 
 The install contract additionally runs the built distribution with a fake systemd provider and a PATH that contains no Codex binary. It proves deterministic install-time discovery succeeds and Agent WebMCP installation does not depend on Codex.
 

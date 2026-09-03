@@ -14,7 +14,7 @@ test('Fleet Cockpit discovers provider candidates and drives Service Control end
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Managed services' })).toBeVisible();
   await expect(page.getByText('No managed services yet')).toBeVisible();
-  await expect(page.locator('#browser-surface-count')).toContainText('16 operations exposed');
+  await expect(page.locator('#browser-surface-count')).toContainText('18 operations exposed');
 
   await page.locator('#discover-services-button').click();
   await expect(page.getByRole('heading', { name: 'Discover Services' })).toBeVisible();
@@ -119,15 +119,18 @@ test('Jobs workspace covers deterministic, scheduled, recurring, Codex, trace, a
   await expect(page.locator('#job-inspector')).toContainText('SUCCEEDED', { timeout: 10_000 });
   await expect(page.locator('#job-inspector')).toContainText('Installed Codex CLI');
   await expect(page.locator('#job-inspector')).toContainText('fake Codex execution complete');
+  await expect(page.locator('#job-inspector')).toContainText('codex:local');
 });
 
 test('approved registry, activity, target, settings, agents, and mobile surfaces stay truthful', async ({ page }) => {
   await page.goto('/');
 
   await page.locator('#primary-nav [data-page="operations"]').click();
-  await expect(page.getByText('21 canonical capabilities.')).toBeVisible();
+  await expect(page.getByText('23 canonical capabilities.')).toBeVisible();
   await expect(page.getByText('service.diagnostics', { exact: true })).toBeVisible();
   await expect(page.getByText('job.cancel', { exact: true })).toBeVisible();
+  await expect(page.getByText('agent.list', { exact: true })).toBeVisible();
+  await expect(page.getByText('agent.inspect', { exact: true })).toBeVisible();
 
   await page.locator('#primary-nav [data-page="catalog"]').click();
   await expect(page.getByRole('heading', { name: 'Projection Matrix' })).toBeVisible();
@@ -140,7 +143,14 @@ test('approved registry, activity, target, settings, agents, and mobile surfaces
   await expect(page.getByText(/job-[a-f0-9]{12}/).first()).toBeVisible();
 
   await page.locator('#primary-nav [data-page="agents"]').click();
-  await expect(page.getByText('Agent registry is not available in this runtime')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Agent Registry' })).toBeVisible();
+  await expect(page.locator('[data-open-agent="codex:local"]')).toContainText('Installed Codex CLI');
+  await expect(page.locator('[data-open-agent="codex:local"]')).toContainText('ONLINE');
+  await expect(page.locator('[data-open-agent="codex:local"]')).toContainText('codex-cli test');
+  await expect(page.locator('.agent-inspector')).toContainText('CODEX_CLI');
+  await expect(page.locator('.agent-inspector')).toContainText('service-job.prompt');
+  await expect(page.locator('.agent-inspector')).toContainText('service-discovery.read-only');
+  await expect(page.locator('#agent-count-nav')).toHaveText('1');
 
   await page.locator('#target-switch-button').click();
   await expect(page.getByRole('heading', { name: 'Target Switcher' })).toBeVisible();
@@ -148,20 +158,29 @@ test('approved registry, activity, target, settings, agents, and mobile surfaces
   await expect(page.locator('.target-table-head')).toContainText('Agent');
   await expect(page.locator('.target-table-head')).toContainText('Services');
   await expect(page.locator('.target-table-head')).toContainText('Heartbeat');
-  await expect(page.locator('.target-row').first()).toContainText('No agent registry');
-  await expect(page.locator('.target-row').first()).toContainText('No heartbeat source');
+  await expect(page.locator('.target-row').first()).toContainText('Installed Codex CLI');
+  await expect(page.locator('.target-row').first()).toContainText('ONLINE');
+  await expect(page.locator('.target-row').first()).toContainText('Observed by Agent WebMCP');
   await expect(page.locator('.health-inline')).toHaveText(/\d+ healthy · 0 degraded/);
   await page.locator('.modal-close').click();
 
   await page.locator('#primary-nav [data-page="settings"]').click();
   await expect(page.getByRole('heading', { name: 'Security & Exposure' })).toBeVisible();
   await page.locator('[data-settings-tab="webmcp"]').click();
-  await expect(page.locator('.setting-row').filter({ hasText: 'Exposed operations' })).toContainText('16');
+  await expect(page.locator('.setting-row').filter({ hasText: 'Exposed operations' })).toContainText('18');
   await page.locator('[data-settings-tab="security"]').click();
   await expect(page.getByText('NO_AUTH is active.').last()).toBeVisible();
   await expect(page.getByText('Running job cancellation')).toBeVisible();
 
   await page.setViewportSize({ width: 390, height: 844 });
+  await page.locator('#primary-nav [data-page="agents"]').click();
+  const agentOverflow = await page.evaluate(() => {
+    const wrap = document.querySelector('.agents-workspace .table-wrap');
+    return { documentWidth: document.documentElement.scrollWidth, viewportWidth: window.innerWidth, internalWidth: wrap?.scrollWidth ?? 0, clientWidth: wrap?.clientWidth ?? 0 };
+  });
+  expect(agentOverflow.documentWidth).toBeLessThanOrEqual(agentOverflow.viewportWidth);
+  expect(agentOverflow.internalWidth).toBeGreaterThanOrEqual(agentOverflow.clientWidth);
+
   await page.locator('#primary-nav [data-page="services"]').click();
   const overflow = await page.evaluate(() => ({
     documentWidth: document.documentElement.scrollWidth,

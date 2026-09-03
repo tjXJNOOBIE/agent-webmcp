@@ -11,22 +11,22 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class WebMcpToolPolicyTest {
     @Test
-    void projectsExplicitSixteenToolBrowserSurfaceAndFourteenToolMcpSurface() {
+    void projectsExplicitEighteenToolBrowserSurfaceAndSixteenToolMcpSurface() {
         var catalog = DefaultOperationCatalog.create();
         Set<String> web = catalog.registrations().stream().filter(WebMcpToolPolicy::allows)
                 .map(registration -> registration.descriptor().id().value()).collect(Collectors.toSet());
         Set<String> mcp = catalog.registrations().stream().filter(McpToolPolicy::allows)
                 .map(registration -> registration.descriptor().id().value()).collect(Collectors.toSet());
 
-        assertEquals(16, web.size());
-        assertEquals(14, mcp.size());
-        assertTrue(web.containsAll(Set.of("service.add", "service.remove", "service.diagnostics", "job.list", "job.inspect", "job.logs")));
+        assertEquals(18, web.size());
+        assertEquals(16, mcp.size());
+        assertTrue(web.containsAll(Set.of("agent.list", "agent.inspect", "service.add", "service.remove", "service.diagnostics", "job.list", "job.inspect", "job.logs")));
         assertFalse(web.contains("service.discover"));
         assertFalse(web.contains("job.execute"));
         assertFalse(web.contains("job.cancel"));
         assertFalse(web.stream().anyMatch(id -> id.startsWith("target.")));
 
-        assertTrue(mcp.contains("service.diagnostics"));
+        assertTrue(mcp.containsAll(Set.of("agent.list", "agent.inspect", "service.diagnostics")));
         assertFalse(mcp.contains("service.add"));
         assertFalse(mcp.contains("service.remove"));
         assertFalse(mcp.contains("service.discover"));
