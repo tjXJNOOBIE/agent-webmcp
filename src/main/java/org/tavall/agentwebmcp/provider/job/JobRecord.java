@@ -5,10 +5,12 @@ import org.tavall.agentwebmcp.operation.OperationExecution;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 
 public record JobRecord(
         String id,
         String operationId,
+        Optional<String> agentId,
         JobState state,
         Instant createdAt,
         Instant startedAt,
@@ -20,6 +22,7 @@ public record JobRecord(
         List<JobLogEntry> logs
 ) {
     public JobRecord {
+        agentId = agentId == null ? Optional.empty() : agentId;
         logs = logs == null ? List.of() : List.copyOf(logs);
     }
 }

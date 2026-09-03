@@ -16,17 +16,17 @@ class DefaultOperationCatalogTest {
         OperationCatalog catalog = DefaultOperationCatalog.create();
         List<String> ids = catalog.registrations().stream().map(registration -> registration.descriptor().id().value()).toList();
 
-        assertEquals(16, ids.size());
+        assertEquals(18, ids.size());
         assertTrue(ids.containsAll(List.of(
                 "system.status", "metrics.snapshot", "target.list", "target.inspect",
-                "service.list", "service.inspect", "service.status", "service.logs",
+                "service.list", "service.add", "service.remove", "service.inspect", "service.status", "service.logs",
                 "service.start", "service.stop", "service.restart", "service.reload",
                 "job.list", "job.inspect", "job.logs", "job.execute"
         )));
         long mutating = catalog.registrations().stream()
                 .filter(registration -> registration.descriptor().access() == OperationAccess.MUTATING)
                 .count();
-        assertEquals(5, mutating);
+        assertEquals(7, mutating);
     }
 
     @Test

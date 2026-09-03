@@ -39,7 +39,7 @@ class AgentWebMcpHttpServerTest {
             assertTrue(health.body().contains("\"webServer\":\"jdk-httpserver\""));
             assertTrue(health.body().contains("\"transport\":\"http-json\""));
             assertTrue(health.body().contains("\"authMode\":\"NO_AUTH\""));
-            assertTrue(health.body().contains("\"operationCount\":16"));
+            assertTrue(health.body().contains("\"operationCount\":18"));
             assertTrue(health.body().contains("local-durable-jobs"));
 
             HttpResponse<String> catalog = client.send(

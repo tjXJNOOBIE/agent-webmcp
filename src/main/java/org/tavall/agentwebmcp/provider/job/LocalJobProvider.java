@@ -71,7 +71,7 @@ public final class LocalJobProvider implements JobProvider, IDependencyAccess {
     }
 
     @Override
-    public JobSubmission submit(String operationId, JsonNode input, Duration timeout, OperationInvoker operationInvoker) {
+    public JobSubmission submit(String operationId, JsonNode input, Duration timeout, Optional<String> agentId, OperationInvoker operationInvoker) {
         Objects.requireNonNull(operationInvoker, "operationInvoker");
         if (operationId == null || operationId.isBlank()) {
             throw new IllegalArgumentException("operationId is required");
@@ -80,17 +80,18 @@ public final class LocalJobProvider implements JobProvider, IDependencyAccess {
             throw new IllegalArgumentException("timeout must be between 1 second and 15 minutes");
         }
         ensureRecovered();
+        Optional<String> resolvedAgentId = agentId == null ? Optional.empty() : agentId;
 
         String jobId = "job-" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
         Instant now = Instant.now();
         JobRecord queued = new JobRecord(
-                jobId, operationId, JobState.QUEUED, now, null, null, Math.toIntExact(timeout.toSeconds()),
+                jobId, operationId, resolvedAgentId, JobState.QUEUED, now, null, null, Math.toIntExact(timeout.toSeconds()),
                 input == null ? objectMapper().createObjectNode() : input.deepCopy(), null, null,
                 List.of(new JobLogEntry(now, "INFO", "Queued operation " + operationId))
         );
         jobRepository().write(queued);
         AsyncTask.runAsync(() -> executeJob(jobId, operationInvoker));
-        return new JobSubmission(jobId, operationId, JobState.QUEUED, queued.timeoutSeconds());
+        return new JobSubmission(jobId, operationId, resolvedAgentId, JobState.QUEUED, queued.timeoutSeconds());
     }
 
     private void executeJob(String jobId, OperationInvoker operationInvoker) {
@@ -184,16 +185,16 @@ public final class LocalJobProvider implements JobProvider, IDependencyAccess {
     ) {
         List<JobLogEntry> logs = new ArrayList<>(job.logs());
         logs.add(log);
-        return new JobRecord(job.id(), job.operationId(), state, job.createdAt(), startedAt, completedAt,
+        return new JobRecord(job.id(), job.operationId(), job.agentId(), state, job.createdAt(), startedAt, completedAt,
                 job.timeoutSeconds(), job.input(), execution, failureReason, List.copyOf(logs));
     }
 
     private static JobSummary summary(JobRecord job) {
-        return new JobSummary(job.id(), job.operationId(), job.state(), job.createdAt(), job.completedAt());
+        return new JobSummary(job.id(), job.operationId(), job.agentId(), job.state(), job.createdAt(), job.completedAt());
     }
 
     private static JobDetails details(JobRecord job) {
-        return new JobDetails(job.id(), job.operationId(), job.state(), job.createdAt(), job.startedAt(), job.completedAt(),
+        return new JobDetails(job.id(), job.operationId(), job.agentId(), job.state(), job.createdAt(), job.startedAt(), job.completedAt(),
                 job.timeoutSeconds(), job.input(), job.execution(), job.failureReason());
     }
 

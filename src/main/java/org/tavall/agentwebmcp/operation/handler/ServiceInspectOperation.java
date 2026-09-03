@@ -9,6 +9,7 @@ public final class ServiceInspectOperation implements OperationHandler<ServiceId
     @Override
     public ServiceDetails execute(OperationContext context, ServiceIdInput input) {
         OperationTargets.resolve(context, input.targetId());
+        ManagedServiceAccess.requireManaged(context, input.serviceId());
         return context.serviceProvider().inspectService(input.serviceId());
     }
 }

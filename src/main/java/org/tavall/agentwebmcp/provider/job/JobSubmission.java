@@ -1,4 +1,6 @@
 package org.tavall.agentwebmcp.provider.job;
 
-public record JobSubmission(String jobId, String operationId, JobState state, int timeoutSeconds) {
+import java.util.Optional;
+
+public record JobSubmission(String jobId, String operationId, Optional<String> agentId, JobState state, int timeoutSeconds) {
 }

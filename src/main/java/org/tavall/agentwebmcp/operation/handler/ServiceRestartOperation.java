@@ -9,6 +9,7 @@ public final class ServiceRestartOperation implements OperationHandler<ServiceId
     @Override
     public ServiceMutationResult execute(OperationContext context, ServiceIdInput input) {
         OperationTargets.resolve(context, input.targetId());
+        ManagedServiceAccess.requireManaged(context, input.serviceId());
         return context.serviceProvider().restartService(input.serviceId());
     }
 }

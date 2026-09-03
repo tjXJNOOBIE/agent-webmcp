@@ -31,12 +31,14 @@ class LocalJobProviderTest {
                 "system.status",
                 objectMapper.createObjectNode().put("probe", true),
                 Duration.ofSeconds(2),
+                Optional.of("codex:test-agent"),
                 (operationId, input) -> success(operationId, input)
         );
 
         JobDetails completed = awaitTerminal(provider, submission.jobId());
         assertEquals(JobState.SUCCEEDED, completed.state());
         assertEquals("system.status", completed.operationId());
+        assertEquals(Optional.of("codex:test-agent"), completed.agentId());
         assertEquals("system.status", completed.execution().operationId());
         assertTrue(Files.isRegularFile(dataDirectory.resolve("jobs").resolve(submission.jobId() + ".json")));
 
@@ -90,6 +92,7 @@ class LocalJobProviderTest {
                 "slow.operation",
                 objectMapper.createObjectNode(),
                 Duration.ofSeconds(1),
+                Optional.empty(),
                 (operationId, input) -> {
                     try {
                         Thread.sleep(Duration.ofSeconds(10));

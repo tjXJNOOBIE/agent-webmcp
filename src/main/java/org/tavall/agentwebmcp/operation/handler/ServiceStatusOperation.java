@@ -10,6 +10,7 @@ public final class ServiceStatusOperation implements OperationHandler<ServiceIdI
     @Override
     public Result execute(OperationContext context, ServiceIdInput input) {
         String targetId = OperationTargets.resolve(context, input.targetId());
+        ManagedServiceAccess.requireManaged(context, input.serviceId());
         ServiceDetails details = context.serviceProvider().inspectService(input.serviceId());
         return new Result(targetId, details.id(), details.state(), details.subState(), details.pid());
     }

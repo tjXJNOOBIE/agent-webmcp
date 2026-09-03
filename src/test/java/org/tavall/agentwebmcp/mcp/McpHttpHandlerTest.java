@@ -27,7 +27,7 @@ class McpHttpHandlerTest {
     @Test
     void exposesBoundedOperationsThroughStreamableHttpMcp() throws Exception {
         FakeServiceProvider services = new FakeServiceProvider();
-        AgentWebMcpRuntime.builder()
+        AgentWebMcpRuntime runtime = AgentWebMcpRuntime.builder()
                 .serviceProvider(services)
                 .dataDirectory(dataDirectory)
                 .build();
@@ -66,8 +66,13 @@ class McpHttpHandlerTest {
             assertTrue(names.contains("system.status"));
             assertTrue(names.contains("service.logs"));
             assertTrue(names.contains("service.restart"));
+            assertTrue(names.contains("job.list"));
+            assertTrue(names.contains("job.inspect"));
+            assertTrue(names.contains("job.logs"));
             assertFalse(names.contains("job.execute"));
             assertFalse(names.contains("target.inspect"));
+            assertFalse(names.contains("service.add"));
+            assertFalse(names.contains("service.remove"));
 
             HttpResponse<String> status = post(client, endpoint, sessionId, """
                     {"jsonrpc":"2.0","id":"call-1","method":"tools/call","params":{
@@ -78,6 +83,11 @@ class McpHttpHandlerTest {
             assertEquals(200, status.statusCode());
             assertEquals("SUCCESS", statusBody.path("result").path("structuredContent").path("status").asText());
             assertFalse(statusBody.path("result").path("isError").asBoolean());
+
+            assertEquals("SUCCESS", runtime.executor().execute(
+                    "service.add",
+                    runtime.objectMapper().createObjectNode().put("serviceId", "demo.service")
+            ).status().name());
 
             HttpResponse<String> restart = post(client, endpoint, sessionId, """
                     {"jsonrpc":"2.0","id":"call-2","method":"tools/call","params":{

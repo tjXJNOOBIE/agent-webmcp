@@ -15,6 +15,8 @@ Current operations:
 - `target.list`
 - `target.inspect`
 - `service.list`
+- `service.add`
+- `service.remove`
 - `service.inspect`
 - `service.status`
 - `service.logs`
@@ -30,6 +32,7 @@ Current operations:
 `job.execute` schedules an existing canonical catalog operation rather than accepting shell commands. Jobs are bounded to 1–900 seconds, persisted beneath the Agent WebMCP data directory, and recovered as failed if the runtime terminates while they are queued or running. Job logs are bounded and cursor-based. Recursive `job.execute` scheduling is rejected. Registered operation implementations are required to be locally bounded and interruption-aware; the current systemd provider enforces that contract at its subprocess boundary.
 
 Durable job persistence is separated from scheduling/execution behind `JobRepository`; the default `FileJobRepository` owns bounded file discovery, ID validation, atomic replacement and JSON persistence.
+Managed-service enrollment is separately persisted through `ManagedServiceRepository`. All service inspect/status/log/lifecycle operations require enrollment before provider access; `service.add` is the controlled enrollment path and `service.remove` only drops Agent WebMCP state. Missing externally deleted units remain visible as stale `UNKNOWN / not-found` entries so they can be cleaned up from the panel.
 
 `metrics.snapshot` uses JVM and operating-system MXBeans. It does not shell out to platform monitoring utilities.
 
@@ -37,9 +40,9 @@ Durable job persistence is separated from scheduling/execution behind `JobReposi
 
 ## Current evidence
 
-The Tavall quality migration has been compiled against actual public source snapshots of `tavall-di`, `tavall-concurrency`, and the Tavall Registry base API. The migrated runtime has passed 26 JUnit tests and 8 Playwright Chromium E2E tests. CLI projection has also returned all 16 operations and successful `system.status` execution. Streamable HTTP MCP initializes successfully, discovers exactly 10 bounded app-facing tools, and executes canonical operations through the same runtime.
+The current runtime compiles against the real Tavall DI/Concurrency/Registry/Logging source/API surface and has passed 27 JUnit tests. The canonical catalog contains 18 operations. Streamable HTTP MCP exposes 13 bounded app-facing tools and keeps `service.add`, `service.remove`, `target.*`, and `job.execute` outside the ChatGPT projection. Durable jobs can carry an optional `agentId`, while job creation remains internal.
 
-A clean-user install was also exercised from an assembled distribution into a fresh HOME. The installer generated the expected private config, the installed binary served health and MCP from its installed path, `verify-install.sh` completed initialize and `tools/list`, and the installed CLI reported 16 canonical operations with 10 MCP-exposed operations. The default systemd-user-service path was exercised with a sandboxed `systemctl` shim to verify `daemon-reload` and `enable --now` invocation without mutating the host user manager.
+A clean-user install was exercised from an assembled distribution into a fresh HOME. The installer generated private config and the installed binary served health/MCP from its installed path. The default user-service setup and the explicit `--system-service` setup were both exercised with sandboxed `systemctl` shims. System mode creates a protected root service for the full systemd mutation path; ordinary user mode may be read-only for system services depending on PolicyKit.
 
 OpenAI Secure MCP Tunnel itself is not end-to-end connected in this evidence because no tunnel ID/runtime API key is available in the repository or validation environment. ChatGPT write-action testing additionally depends on an eligible Business/Enterprise/Edu workspace.
 
@@ -49,4 +52,4 @@ The canonical Gradle wrapper path is currently blocked in the Tavall host-local 
 
 Repository-owned Playwright tests run against the real lightweight Java HTTP runtime on `http://127.0.0.1`. The WebMCP polyfill is used only by the test browser to provide the current `document.modelContext` contract when the installed browser does not expose native WebMCP. Production page code talks only to `document.modelContext`.
 
-The browser suite verifies the Java transport identity, catalog discovery, canonical WebMCP execution, durable job execution/inspection, metrics, recursive-job rejection, unknown-operation rejection, and a real MCP initialize/tools-list/tools-call flow with internal operations excluded.
+The ordinary browser suite verifies the Java transport identity, 18-operation catalog discovery, canonical WebMCP execution, agent-linked durable job execution/inspection, metrics, recursive-job rejection, unknown-operation rejection, and a real MCP initialize/tools-list/tools-call flow with the 13-tool policy enforced. A dedicated Fleet Cockpit Playwright test clicks Add, Stop, Start, Restart, Logs, and Remove against the real Java HTTP/canonical-operation stack with a stateful external-provider fixture. Separately, the DEVELOPMENT `e2e-chatgpt-web.service` validation canary was driven through real stop/start/restart transitions and cursor-based journal reads through Tavall CONTROL, ending RUNNING. The sandbox cannot grant the Agent WebMCP test process root/PolicyKit authority, so these two evidence tracks are intentionally reported separately rather than falsely claiming the panel process caused the host-level canary mutation.

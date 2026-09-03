@@ -25,6 +25,7 @@ class OperationExecutorTest {
     void executesTypedMutatingOperationThroughProvider() throws Exception {
         FakeServiceProvider serviceProvider = new FakeServiceProvider();
         AgentWebMcpRuntime runtime = runtime(serviceProvider);
+        enrollDemoService(runtime);
 
         OperationExecution execution = runtime.executor().execute(
                 "service.restart",
@@ -40,6 +41,7 @@ class OperationExecutorTest {
     @Test
     void projectsServiceStatusAndSystemMetrics() throws Exception {
         AgentWebMcpRuntime runtime = runtime(new FakeServiceProvider());
+        enrollDemoService(runtime);
 
         OperationExecution status = runtime.executor().execute(
                 "service.status",
@@ -103,6 +105,14 @@ class OperationExecutorTest {
         assertEquals(OperationExecutionStatus.FAILURE, execution.status());
         assertEquals(400, execution.error().httpStatus());
         assertEquals("INVALID_INPUT", execution.error().code());
+    }
+
+    private void enrollDemoService(AgentWebMcpRuntime runtime) {
+        OperationExecution enrollment = runtime.executor().execute(
+                "service.add",
+                objectMapper.createObjectNode().put("serviceId", "demo.service")
+        );
+        assertEquals(OperationExecutionStatus.SUCCESS, enrollment.status());
     }
 
     private AgentWebMcpRuntime runtime(FakeServiceProvider serviceProvider) {

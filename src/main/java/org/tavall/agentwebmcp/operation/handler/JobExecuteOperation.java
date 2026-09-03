@@ -23,6 +23,7 @@ public final class JobExecuteOperation implements OperationHandler<JobExecuteInp
                 operationId.value(),
                 input.input(),
                 Duration.ofSeconds(input.timeoutSeconds().orElse(60)),
+                input.agentId(),
                 context.operationInvoker()
         );
     }

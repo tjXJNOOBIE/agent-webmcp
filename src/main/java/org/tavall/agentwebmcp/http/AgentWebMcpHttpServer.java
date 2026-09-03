@@ -52,6 +52,16 @@ public final class AgentWebMcpHttpServer implements AutoCloseable, DependencyAcc
                 "/web/agent-webmcp-webmcp.js",
                 "text/javascript; charset=utf-8"
         ));
+        server.createContext("/assets/agent-webmcp-dashboard.css", exchange -> staticResource(
+                exchange,
+                "/web/dashboard.css",
+                "text/css; charset=utf-8"
+        ));
+        server.createContext("/assets/agent-webmcp-dashboard.js", exchange -> staticResource(
+                exchange,
+                "/web/dashboard.js",
+                "text/javascript; charset=utf-8"
+        ));
         server.createContext("/", exchange -> staticResource(
                 exchange,
                 "/web/index.html",

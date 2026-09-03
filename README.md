@@ -2,17 +2,17 @@
 
 Agent WebMCP is a lightweight Java operations server that exposes one canonical Tavall-owned operation runtime through CLI, HTTP/JSON, WebMCP, and a bounded Model Context Protocol (MCP) app surface.
 
-The application deliberately stops short of becoming a remote shell. The app-facing MCP surface is for **service control, bounded near-live service logs, and general system/service health**.
+The application deliberately stops short of becoming a remote shell. The app-facing MCP surface is for **managed service control, bounded near-live service logs, general system/service health, and read-only machine-agent job state**.
 
 ## Current capabilities
 
-The internal canonical runtime currently owns 16 operations. The ChatGPT/MCP app intentionally exposes only these 10:
+The canonical runtime now owns **18 operations**. The ChatGPT/MCP app exposes **13** of them: health/metrics, managed-service observability/lifecycle, and read-only agent-job state.
 
 | MCP tool | Purpose | Access |
 | --- | --- | --- |
 | `system.status` | Runtime/provider/auth health summary | Read |
 | `metrics.snapshot` | JVM/OS metrics snapshot | Read |
-| `service.list` | List services visible to the provider | Read |
+| `service.list` | List services enrolled in Agent WebMCP | Read |
 | `service.inspect` | Inspect one service in detail | Read |
 | `service.status` | Read current service state | Read |
 | `service.logs` | Read bounded cursor-based journal output | Read |
@@ -20,10 +20,41 @@ The internal canonical runtime currently owns 16 operations. The ChatGPT/MCP app
 | `service.stop` | Stop a service | Write |
 | `service.restart` | Restart a service | Write |
 | `service.reload` | Reload a service | Write |
+| `job.list` | List recent durable machine-agent jobs | Read |
+| `job.inspect` | Inspect one job and its linked agent/result | Read |
+| `job.logs` | Read bounded job lifecycle logs | Read |
 
-Internal `job.*` and `target.*` operations remain available to the canonical CLI/HTTP runtime but are **not exposed to the ChatGPT MCP app**. There is no generic shell tool, no arbitrary command operation, and no MCP filesystem mutation surface.
+The six operations that were previously kept off MCP were `target.list`, `target.inspect`, `job.list`, `job.inspect`, `job.logs`, and `job.execute`. This pass brings the three **job read** operations into MCP while keeping `job.execute` internal. Jobs can carry an optional `agentId`, so Codex/other machine agents can create durable jobs internally and the panel/ChatGPT can observe who owns them without gaining job-creation authority.
+
+Two new canonical operations, `service.add` and `service.remove`, power the Fleet Cockpit's managed-service inventory. They are deliberately **panel/HTTP/WebMCP operations, not ChatGPT MCP tools**. Adding validates that an existing provider service exists and stores its ID in Agent WebMCP's durable inventory. Removing only unmanages it; it does not stop, disable, delete, or rewrite the systemd unit.
+The managed inventory is also the lifecycle authority boundary. `service.inspect`, `service.status`, `service.logs`, `service.start`, `service.stop`, `service.restart`, and `service.reload` reject unenrolled IDs with `SERVICE_NOT_MANAGED` before the systemd provider is invoked. An MCP client therefore cannot bypass the panel's enrollment scope by guessing a unit name. If a managed unit later disappears from systemd, it remains visible as `UNKNOWN / not-found` so an operator can remove the stale enrollment.
+
+`target.list`, `target.inspect`, `job.execute`, `service.add`, and `service.remove` therefore remain outside the ChatGPT MCP projection. There is no generic shell tool, arbitrary command operation, or MCP filesystem mutation surface.
 
 `service.logs` is near-live through bounded repeated reads and cursors. It is not an unbounded interactive terminal stream.
+
+### Fleet Cockpit interaction flow
+
+```mermaid
+flowchart TD
+    Add[Enter existing service ID + Add] --> AddOp[service.add]
+    AddOp --> Validate[Systemd provider validates unit]
+    Validate --> Inventory[managed-services.txt]
+    Inventory --> List[service.list renders managed services]
+    List --> Select[Select service]
+    Select --> Lifecycle[start / stop / restart / reload]
+    Lifecycle --> Canonical[Canonical OperationExecutor]
+    Canonical --> Systemd[SystemdServiceProvider]
+    Systemd --> Observed[Observed service state returned to panel]
+    Select --> Logs[service.logs + cursor]
+    Logs --> Console[Bounded near-live journal console]
+    Select --> Remove[service.remove]
+    Remove --> Inventory
+    Remove --> Preserve[Systemd unit remains untouched]
+    Jobs[Machine agent creates internal job + agentId] --> JobRepo[JobRepository]
+    JobRepo --> JobRead[job.list / inspect / logs]
+    JobRead --> PanelJobs[Panel + ChatGPT read-only job state]
+```
 
 ## Architecture
 
@@ -97,6 +128,19 @@ curl -fsS http://127.0.0.1:7188/health
 ./scripts/verify-install.sh
 ```
 
+The user-service mode is suitable for health, metrics, catalog, jobs, and whatever systemd reads the account is allowed to perform. On a normal Linux host, system-level `start`/`stop`/`restart`/`reload` is usually denied by PolicyKit. For the **full system-service control path** on a dedicated operations machine, build as your normal user and then install the already-built distribution as a protected root system service:
+
+```bash
+./gradlew --no-daemon installDist
+sudo ./scripts/install.sh \
+  --dist "$PWD/build/install/agent-webmcp" \
+  --system-service
+sudo systemctl status agent-webmcp.service
+curl -fsS http://127.0.0.1:7188/health
+```
+
+System mode defaults to `/opt/agent-webmcp`, `/etc/agent-webmcp`, and `/var/lib/agent-webmcp`, and installs `/etc/systemd/system/agent-webmcp.service`. The unit keeps `NoNewPrivileges`, `PrivateTmp`, `ProtectHome`, and `ProtectSystem=strict`, with only the Agent WebMCP state directory writable. It nevertheless has root service-control authority, so keep the HTTP/MCP bind on loopback and use the private tunnel boundary. **Do not expose a `NO_AUTH` root control plane directly to the network.**
+
 For a portable/test install without systemd:
 
 ```bash
@@ -113,14 +157,16 @@ You can override the install paths and bind address with `--prefix`, `--config-d
 
 ```mermaid
 flowchart TD
-    Clone[Clone Agent WebMCP] --> Install[Run scripts/install.sh]
-    Install --> Build[Gradle installDist]
-    Build --> Copy[Install into ~/.local/share/agent-webmcp]
-    Copy --> Config[Write ~/.config/agent-webmcp/agent-webmcp.env]
-    Config --> Service[Create + start systemd user service]
-    Service --> Health[GET 127.0.0.1:7188/health]
+    Clone[Clone Agent WebMCP] --> Build[Gradle installDist]
+    Build --> Mode{Install mode}
+    Mode -->|Read / user authority| User[Run scripts/install.sh]
+    Mode -->|Full system service control| System[sudo scripts/install.sh --dist ... --system-service]
+    User --> UserSvc[systemd user service]
+    System --> SystemSvc[protected system service]
+    UserSvc --> Health[GET 127.0.0.1:7188/health]
+    SystemSvc --> Health
     Health --> MCPInit[POST initialize to 127.0.0.1:7188/mcp]
-    MCPInit --> Tools[tools/list returns bounded MCP tool set]
+    MCPInit --> Tools[tools/list returns 13 MCP tools]
 ```
 
 ## Connect through OpenAI Secure MCP Tunnel
@@ -197,7 +243,7 @@ Current ChatGPT custom-app setup scans the MCP server tools and creates a draft 
 6. Name the app **Agent WebMCP**.
 7. Choose **Tunnel** and select or paste the created `tunnel_...` ID.
 8. Use **No Auth** for the MCP target. The tunnel runtime key belongs to `tunnel-client`, not to ChatGPT app fields.
-9. Click **Scan Tools**. The scan should discover exactly the 10 app-facing tools listed above.
+9. Click **Scan Tools**. The scan should discover exactly the 13 app-facing tools listed above.
 10. Click **Create**. The app should appear as a draft/development app.
 11. Start a new chat with Agent WebMCP selected and test a read-only call first, for example: `Show the current Agent WebMCP system status.`
 12. Then test logs: `Show the latest logs for demo.service.`
@@ -209,8 +255,8 @@ flowchart TD
     TunnelReady --> CreateApp[ChatGPT Apps → Create]
     CreateApp --> TunnelMode[Connection: Tunnel + tunnel_id]
     TunnelMode --> Scan[Scan Tools]
-    Scan --> TenTools[10 bounded operations discovered]
-    TenTools --> Draft[Create draft app]
+    Scan --> ThirteenTools[13 bounded operations discovered]
+    ThirteenTools --> Draft[Create draft app]
     Draft --> ReadTest[system.status / service.status / service.logs]
     ReadTest --> WriteTest[service.restart on safe test service]
     WriteTest --> Verify[service.status + service.logs verification]
@@ -263,7 +309,7 @@ flowchart TD
     G --> H[tunnel-client doctor]
     H --> I[tunnel-client run]
     I --> J[Create ChatGPT custom app in Tunnel mode]
-    J --> K[Scan 10 tools]
+    J --> K[Scan 13 tools]
     K --> L[Test read-only health/log operations]
     L --> M[Test service lifecycle action on safe service]
     M --> N[Verify observed service state/logs]

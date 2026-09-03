@@ -9,6 +9,7 @@ public final class ServiceStopOperation implements OperationHandler<ServiceIdInp
     @Override
     public ServiceMutationResult execute(OperationContext context, ServiceIdInput input) {
         OperationTargets.resolve(context, input.targetId());
+        ManagedServiceAccess.requireManaged(context, input.serviceId());
         return context.serviceProvider().stopService(input.serviceId());
     }
 }

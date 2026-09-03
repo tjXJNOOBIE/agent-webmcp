@@ -9,6 +9,7 @@ public final class ServiceLogsOperation implements OperationHandler<ServiceLogsI
     @Override
     public ServiceLogSlice execute(OperationContext context, ServiceLogsInput input) {
         OperationTargets.resolve(context, input.targetId());
+        ManagedServiceAccess.requireManaged(context, input.serviceId());
         return context.serviceProvider().readLogs(input.serviceId(), input.lines().orElse(200), input.cursor());
     }
 }

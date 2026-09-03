@@ -16,5 +16,5 @@ public interface JobProvider {
 
     JobLogSlice readLogs(String jobId, int lines, Optional<String> cursor);
 
-    JobSubmission submit(String operationId, JsonNode input, Duration timeout, OperationInvoker operationInvoker);
+    JobSubmission submit(String operationId, JsonNode input, Duration timeout, Optional<String> agentId, OperationInvoker operationInvoker);
 }

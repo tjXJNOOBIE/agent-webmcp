@@ -15,7 +15,10 @@ public final class McpToolPolicy {
             "service.start",
             "service.stop",
             "service.restart",
-            "service.reload"
+            "service.reload",
+            "job.list",
+            "job.inspect",
+            "job.logs"
     );
 
     private McpToolPolicy() {

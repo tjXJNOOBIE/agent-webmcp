@@ -1,5 +1,6 @@
 package org.tavall.agentwebmcp.support;
 
+import org.tavall.agentwebmcp.provider.ProviderException;
 import org.tavall.agentwebmcp.provider.service.ServiceDetails;
 import org.tavall.agentwebmcp.provider.service.ServiceLogSlice;
 import org.tavall.agentwebmcp.provider.service.ServiceMutationResult;
@@ -15,6 +16,7 @@ public final class FakeServiceProvider implements ServiceProvider {
     private ServiceState state = ServiceState.RUNNING;
     private String lastAction = "";
     private String lastServiceId = "";
+    private boolean missing;
 
     @Override
     public String providerName() {
@@ -28,11 +30,17 @@ public final class FakeServiceProvider implements ServiceProvider {
 
     @Override
     public List<ServiceSummary> listServices() {
+        if (missing) {
+            return List.of();
+        }
         return List.of(new ServiceSummary("demo.service", "Demo service", state, state == ServiceState.RUNNING ? "running" : "dead"));
     }
 
     @Override
     public ServiceDetails inspectService(String serviceId) {
+        if (missing) {
+            throw new ProviderException("SERVICE_NOT_FOUND", "Unknown service: " + serviceId, 404);
+        }
         return details(serviceId);
     }
 
@@ -72,6 +80,10 @@ public final class FakeServiceProvider implements ServiceProvider {
 
     public String lastServiceId() {
         return lastServiceId;
+    }
+
+    public void setMissing(boolean missing) {
+        this.missing = missing;
     }
 
     private ServiceMutationResult mutation(String serviceId, String action) {

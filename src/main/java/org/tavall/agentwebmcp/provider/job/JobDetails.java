@@ -4,10 +4,12 @@ import com.fasterxml.jackson.databind.JsonNode;
 import org.tavall.agentwebmcp.operation.OperationExecution;
 
 import java.time.Instant;
+import java.util.Optional;
 
 public record JobDetails(
         String id,
         String operationId,
+        Optional<String> agentId,
         JobState state,
         Instant createdAt,
         Instant startedAt,

@@ -15,6 +15,8 @@ import org.tavall.agentwebmcp.provider.metrics.JvmSystemMetricsProvider;
 import org.tavall.agentwebmcp.provider.metrics.MetricsProvider;
 import org.tavall.agentwebmcp.provider.process.CommandExecutor;
 import org.tavall.agentwebmcp.provider.process.ProcessCommandExecutor;
+import org.tavall.agentwebmcp.provider.service.FileManagedServiceRepository;
+import org.tavall.agentwebmcp.provider.service.ManagedServiceRepository;
 import org.tavall.agentwebmcp.provider.service.ServiceProvider;
 import org.tavall.agentwebmcp.provider.service.SystemdServiceProvider;
 import org.tavall.agentwebmcp.provider.target.LocalTargetProvider;
@@ -133,6 +135,12 @@ public final class AgentWebMcpRuntime implements IDependencyAccess {
             TargetProvider resolvedTargetProvider = targetProvider == null ? new LocalTargetProvider() : targetProvider;
             dependencies.registerInstance(TargetProvider.class, resolvedTargetProvider);
 
+            Path resolvedDataDirectory = dataDirectory == null ? defaultDataDirectory() : dataDirectory;
+            ManagedServiceRepository managedServiceRepository = FileManagedServiceRepository.builder()
+                    .dataDirectory(resolvedDataDirectory)
+                    .build();
+            dependencies.registerInstance(ManagedServiceRepository.class, managedServiceRepository);
+
             ServiceProvider resolvedServiceProvider = serviceProvider == null
                     ? SystemdServiceProvider.builder().build()
                     : serviceProvider;
@@ -146,7 +154,7 @@ public final class AgentWebMcpRuntime implements IDependencyAccess {
             JobProvider resolvedJobProvider = jobProvider;
             if (resolvedJobProvider == null) {
                 JobRepository repository = FileJobRepository.builder()
-                        .dataDirectory(dataDirectory == null ? defaultDataDirectory() : dataDirectory)
+                        .dataDirectory(resolvedDataDirectory)
                         .build();
                 dependencies.registerInstance(JobRepository.class, repository);
                 resolvedJobProvider = new LocalJobProvider();
@@ -162,6 +170,7 @@ public final class AgentWebMcpRuntime implements IDependencyAccess {
                     dependencies.getInstance(OperationCatalog.class),
                     dependencies.getInstance(TargetProvider.class),
                     dependencies.getInstance(ServiceProvider.class),
+                    dependencies.getInstance(ManagedServiceRepository.class),
                     dependencies.getInstance(MetricsProvider.class),
                     dependencies.getInstance(JobProvider.class),
                     dependencies.getInstance(OperationInvoker.class)
