@@ -1,11 +1,12 @@
 (() => {
   const runtime = window.__agentWebMcp = { state: 'starting', registeredOperationIds: [] };
 
-  async function executeOperation(operationId, input) {
+  async function executeOperation(operationId, input, signal) {
     const response = await fetch(`/api/v1/operations/${encodeURIComponent(operationId)}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(input ?? {})
+      body: JSON.stringify(input ?? {}),
+      signal
     });
     const payload = await response.json();
     if (!response.ok) {
@@ -35,7 +36,7 @@
         annotations: {
           readOnlyHint: operation.access === 'READ_ONLY'
         },
-        execute: async (input) => executeOperation(operation.id, input)
+        execute: async (input, options = {}) => executeOperation(operation.id, input, options.signal)
       });
       runtime.registeredOperationIds.push(operation.id);
     }

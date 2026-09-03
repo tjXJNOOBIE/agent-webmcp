@@ -4,6 +4,12 @@ Agent WebMCP is a lightweight Java operations server that exposes one canonical 
 
 The application deliberately stops short of becoming a remote shell. The app-facing MCP surface is for **managed service control, bounded near-live service logs, general system/service health, and read-only machine-agent job state**.
 
+## WebMCP Challenge build
+
+This repository contains a browser-native WebMCP implementation for the OpenAI WebMCP Challenge. The production page registers the canonical operation catalog with `document.modelContext.registerTool(...)`; it does **not** treat the separate `/mcp` endpoint as a substitute for WebMCP. The browser tools reuse the same JSON Schemas, access metadata, validation, and Java operation executor as the human Fleet Cockpit.
+
+Submission/implementation evidence, dated commit provenance, and judge verification steps are documented in [`docs/hackathon/WEBMCP_CHALLENGE.md`](docs/hackathon/WEBMCP_CHALLENGE.md). The repository is released under the root [`LICENSE`](LICENSE).
+
 ## Current capabilities
 
 The canonical runtime now owns **18 operations**. The ChatGPT/MCP app exposes **13** of them: health/metrics, managed-service observability/lifecycle, and read-only agent-job state.
