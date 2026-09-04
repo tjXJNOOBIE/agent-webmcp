@@ -11,8 +11,11 @@ import org.tavall.agentwebmcp.support.FakeCodexCliProvider;
 import org.tavall.agentwebmcp.support.FakeServiceProvider;
 import org.tavall.scheduler.interfaces.ICustomScheduler;
 
+import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermissions;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -40,7 +43,13 @@ class LocalJobProviderTest {
             assertEquals("demo.service", completed.serviceId());
             assertEquals(Optional.of("agent:test"), completed.agentId());
             assertEquals("restart", services.lastAction());
-            assertTrue(Files.isRegularFile(dataDirectory.resolve("jobs").resolve(jobId + ".json")));
+            Path jobsDirectory = dataDirectory.resolve("jobs");
+            Path jobFile = jobsDirectory.resolve(jobId + ".json");
+            assertTrue(Files.isRegularFile(jobFile));
+            if (FileSystems.getDefault().supportedFileAttributeViews().contains("posix")) {
+                assertEquals(PosixFilePermissions.fromString("rwx------"), Files.getPosixFilePermissions(jobsDirectory));
+                assertEquals(PosixFilePermissions.fromString("rw-------"), Files.getPosixFilePermissions(jobFile));
+            }
             JobLogSlice logs = runtime.context().jobProvider().readLogs(jobId, 100, Optional.of("0"));
             assertTrue(logs.entries().stream().anyMatch(entry -> entry.message().contains("started")));
             assertTrue(logs.entries().stream().anyMatch(entry -> entry.message().contains("succeeded")));
@@ -150,6 +159,30 @@ class LocalJobProviderTest {
             ProviderException refusal = assertThrows(ProviderException.class, () -> runtime.context().jobProvider().cancel(jobId));
             assertEquals("JOB_NOT_CANCELLABLE", refusal.code());
             assertEquals(JobState.SUCCEEDED, awaitTerminal(runtime.context().jobProvider(), jobId).state());
+        }
+    }
+
+    @Test
+    void runtimeCloseInterruptsAndWaitsForRunningWorker() throws Exception {
+        FakeServiceProvider services = new FakeServiceProvider();
+        services.setLifecycleDelayMillis(5_000);
+        String jobId;
+        AgentWebMcpRuntime runtime = runtime(services, new FakeCodexCliProvider(), null);
+        enroll(runtime);
+        OperationExecution submission = executeJob(runtime, "{\"serviceId\":\"demo.service\",\"operationId\":\"service.restart\",\"input\":{},\"timeoutSeconds\":30}");
+        jobId = submission.output().path("jobId").asText();
+        awaitState(runtime.context().jobProvider(), jobId, JobState.RUNNING);
+        Thread.sleep(50);
+
+        Instant started = Instant.now();
+        runtime.close();
+        assertTrue(Duration.between(started, Instant.now()).compareTo(Duration.ofSeconds(3)) < 0);
+
+        try (AgentWebMcpRuntime recovered = runtime(services, new FakeCodexCliProvider(), null)) {
+            JobDetails details = recovered.context().jobProvider().inspectJob(jobId);
+            assertEquals(JobState.FAILED, details.state());
+            String failureReason = details.failureReason().toLowerCase(java.util.Locale.ROOT);
+            assertTrue(failureReason.contains("shutdown") || failureReason.contains("shut down") || failureReason.contains("stopped"));
         }
     }
 

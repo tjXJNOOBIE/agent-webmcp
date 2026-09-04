@@ -29,10 +29,32 @@ class ProcessCommandExecutorTest {
     }
 
     @Test
+    void blockedStdinDeliveryCannotEscapeExecutionDeadline() {
+        Instant started = Instant.now();
+        CommandResult result = executor.execute(
+                List.of("sh", "-c", "sleep 10"),
+                Duration.ofMillis(100),
+                "x".repeat(1_048_576));
+        assertTrue(result.timedOut());
+        assertTrue(Duration.between(started, Instant.now()).compareTo(Duration.ofSeconds(3)) < 0);
+    }
+
+    @Test
     void boundsProcessOutput() {
         ProviderException failure = assertThrows(ProviderException.class, () -> executor.execute(
                 List.of("sh", "-c", "head -c 1048577 /dev/zero"), Duration.ofSeconds(3)));
         assertEquals("PROCESS_OUTPUT_TOO_LARGE", failure.code());
+    }
+
+    @Test
+    void boundsStdinWriteInsideTheSameProcessDeadline() {
+        Instant started = Instant.now();
+        CommandResult result = executor.execute(
+                List.of("sh", "-c", "sleep 10"),
+                Duration.ofMillis(150),
+                "x".repeat(1_048_576));
+        assertTrue(result.timedOut());
+        assertTrue(Duration.between(started, Instant.now()).compareTo(Duration.ofSeconds(3)) < 0);
     }
 
     @Test

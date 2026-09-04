@@ -55,11 +55,11 @@ The health payload identifies `webServer=jdk-httpserver` and `transport=http-jso
 
 `McpHttpHandler` translates MCP JSON-RPC into the canonical operation executor. It supports the deployed session-oriented MCP protocol versions used by tunnel clients and accepts the current stateless protocol header. Session IDs are opaque and transport-only; they do not become application authorization. Session state is stored through Tavall Cache with a 30-minute sliding activity TTL and a hard 1,024-session bound so abandoned clients cannot grow transport memory without limit. `tools/list` and `tools/call` are constrained by `McpToolPolicy`.
 
-The MCP endpoint validates `Origin` when supplied, caps bodies at 1 MiB, returns JSON-RPC errors for protocol failures, and accepts notification requests without manufacturing responses. The normal ChatGPT path is OpenAI Secure MCP Tunnel targeting the private `http://127.0.0.1:7188/mcp` endpoint.
+The MCP endpoint validates `Origin` when supplied, requires JSON for POST requests, caps bodies at 1 MiB, returns JSON-RPC errors for protocol failures, and accepts notification requests without manufacturing responses. The normal ChatGPT path is OpenAI Secure MCP Tunnel targeting the private `http://127.0.0.1:7188/mcp` endpoint. Agent WebMCP's installer can install the pinned official OpenAI `tunnel-client` v0.0.14 as `agent-webmcp-tunnel.service`; tunnel ID/runtime-key material lives in an owner-only environment file and is not part of the repository or application operation surface.
 
 ## Security
 
-Default bind is `127.0.0.1`. `NO_AUTH` is intentionally supported only behind an operator-controlled trusted local/private tunnel boundary. For ChatGPT, the intended boundary is OpenAI Secure MCP Tunnel with the tunnel client initiating outbound HTTPS; Agent WebMCP itself remains private. The transport does not emit permissive CORS policy. Operation request bodies are capped at 1 MiB and invalid JSON is rejected before operation execution.
+Default bind is `127.0.0.1`, and `NO_AUTH` runtime construction refuses non-loopback bind hosts. `NO_AUTH` is intentionally supported only behind an operator-controlled trusted local/private tunnel boundary. For ChatGPT, the intended boundary is OpenAI Secure MCP Tunnel with the tunnel client initiating outbound HTTPS; Agent WebMCP itself remains private. The transport does not emit permissive CORS policy. Mutating canonical HTTP and MCP POST requests reject cross-origin/simple-content-type browser requests; operation request bodies are capped at 1 MiB and invalid JSON is rejected before operation execution.
 
 ## Lifecycle
 

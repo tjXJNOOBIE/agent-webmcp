@@ -2,10 +2,10 @@ package org.tavall.agentwebmcp.operation.input;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import org.tavall.agentwebmcp.service.ServiceIdSyntax;
 
 import java.time.Instant;
 import java.util.Optional;
-import java.util.regex.Pattern;
 
 public record JobExecuteInput(
         Optional<String> targetId,
@@ -18,14 +18,9 @@ public record JobExecuteInput(
         Optional<Integer> timeoutSeconds,
         Optional<String> agentId
 ) {
-    private static final Pattern SERVICE_ID = Pattern.compile("[A-Za-z0-9_.@:-]+");
-
     public JobExecuteInput {
         targetId = normalize(targetId);
-        if (serviceId == null || serviceId.isBlank() || !SERVICE_ID.matcher(serviceId.trim()).matches()) {
-            throw new IllegalArgumentException("serviceId is required and contains unsupported characters");
-        }
-        serviceId = serviceId.trim();
+        serviceId = ServiceIdSyntax.require(serviceId);
         operationId = normalize(operationId);
         prompt = normalize(prompt);
         agentId = normalize(agentId);

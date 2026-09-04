@@ -40,15 +40,33 @@ public final class ProcessCommandExecutor implements CommandExecutor {
             throw new IllegalArgumentException("process stdin exceeds 1 MiB");
         }
 
+        long deadlineNanos = System.nanoTime() + timeout.toNanos();
         Process process = null;
+        CompletableFuture<Void> stdinWrite = null;
         try {
             Process startedProcess = new ProcessBuilder(List.copyOf(command)).start();
             process = startedProcess;
             CompletableFuture<byte[]> stdout = AsyncTask.supplyAsync(() -> readBounded(startedProcess.getInputStream(), "stdout"));
             CompletableFuture<byte[]> stderr = AsyncTask.supplyAsync(() -> readBounded(startedProcess.getErrorStream(), "stderr"));
-            startedProcess.getOutputStream().write(input);
-            startedProcess.getOutputStream().close();
-            boolean exited = startedProcess.waitFor(timeout.toMillis(), TimeUnit.MILLISECONDS);
+            stdinWrite = AsyncTask.supplyAsync(() -> {
+                try {
+                    startedProcess.getOutputStream().write(input);
+                    startedProcess.getOutputStream().close();
+                    return null;
+                } catch (IOException exception) {
+                    throw new IllegalStateException("Unable to write process stdin", exception);
+                }
+            });
+
+            long remaining = remainingNanos(deadlineNanos);
+            if (remaining == 0 || !awaitStdin(stdinWrite, remaining)) {
+                stdinWrite.cancel(true);
+                terminate(startedProcess);
+                return new CommandResult(-1, decodeBestEffort(stdout), decodeBestEffort(stderr), true);
+            }
+
+            remaining = remainingNanos(deadlineNanos);
+            boolean exited = remaining > 0 && startedProcess.waitFor(remaining, TimeUnit.NANOSECONDS);
             if (!exited) {
                 terminate(startedProcess);
                 return new CommandResult(-1, decodeBestEffort(stdout), decodeBestEffort(stderr), true);
@@ -58,12 +76,34 @@ public final class ProcessCommandExecutor implements CommandExecutor {
             terminate(process);
             throw new ProviderException("PROCESS_START_FAILED", "Unable to start provider command: " + command.getFirst(), 503);
         } catch (InterruptedException exception) {
+            if (stdinWrite != null) {
+                stdinWrite.cancel(true);
+            }
             terminate(process);
             Thread.currentThread().interrupt();
             throw new ProviderException("PROCESS_INTERRUPTED", "Provider command was interrupted", 500);
         } finally {
             closeProcessStreams(process);
         }
+    }
+
+    private static boolean awaitStdin(Future<Void> stdinWrite, long timeoutNanos) throws InterruptedException {
+        try {
+            stdinWrite.get(timeoutNanos, TimeUnit.NANOSECONDS);
+            return true;
+        } catch (TimeoutException exception) {
+            return false;
+        } catch (ExecutionException exception) {
+            Throwable cause = exception.getCause();
+            String message = cause == null || cause.getMessage() == null ? "Unable to write provider command stdin" : cause.getMessage();
+            throw new ProviderException("PROCESS_INPUT_FAILED", message, 500);
+        } catch (CancellationException exception) {
+            throw new ProviderException("PROCESS_INPUT_FAILED", "Provider command stdin write was cancelled", 500);
+        }
+    }
+
+    private static long remainingNanos(long deadlineNanos) {
+        return Math.max(0L, deadlineNanos - System.nanoTime());
     }
 
     private static byte[] readBounded(InputStream input, String streamName) {
@@ -107,10 +147,17 @@ public final class ProcessCommandExecutor implements CommandExecutor {
     }
 
     private static void terminate(Process process) {
-        if (process == null || !process.isAlive()) {
+        if (process == null) {
             return;
         }
-        process.destroyForcibly();
+        process.descendants().forEach(child -> {
+            if (child.isAlive()) {
+                child.destroyForcibly();
+            }
+        });
+        if (process.isAlive()) {
+            process.destroyForcibly();
+        }
         try {
             process.waitFor(TERMINATION_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
         } catch (InterruptedException exception) {

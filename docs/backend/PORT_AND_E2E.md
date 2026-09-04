@@ -35,6 +35,6 @@ The stateful Fleet Cockpit suite exercises the approved Round 4/7 production sur
 
 A dedicated stateful provider fixture drives the accepted Fleet Cockpit through deterministic and AI discovery, Service Control lifecycle/diagnostics/logs, immediate/future/recurring/Codex jobs, execution trace, cancellation, operation registry, projection matrix, activity/resource timeline, real Codex-agent registry with target/heartbeat comparison, Settings tabs, and mobile horizontal-overflow acceptance.
 
-The install contract additionally runs the built distribution with a fake systemd provider and a PATH that contains no Codex binary. It proves deterministic install-time discovery succeeds and Agent WebMCP installation does not depend on Codex.
+The install contract additionally runs the built distribution with a fake systemd provider and a PATH that contains no Codex binary. It proves deterministic install-time discovery succeeds, config/state permissions are owner-only, and Agent WebMCP installation does not depend on Codex. A separate tunnel bundle verification downloads the pinned official OpenAI `tunnel-client` v0.0.14 release, verifies its SHA-256, checks the expected binary/license metadata, and executes the client quickstart surface without using real tunnel credentials.
 
 The full validation command is `bash scripts/ci/run`. Do not report completion from a commit other than the exact pushed PR head.

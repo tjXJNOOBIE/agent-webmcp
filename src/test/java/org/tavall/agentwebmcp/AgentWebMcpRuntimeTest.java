@@ -1,43 +1,33 @@
 package org.tavall.agentwebmcp;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.tavall.agentwebmcp.operation.OperationCatalog;
-import org.tavall.agentwebmcp.operation.OperationContext;
-import org.tavall.agentwebmcp.operation.OperationExecutor;
-import org.tavall.agentwebmcp.provider.codex.CodexCliProvider;
-import org.tavall.agentwebmcp.provider.service.ServiceProvider;
+import org.tavall.agentwebmcp.provider.agent.AgentSummary;
 import org.tavall.agentwebmcp.support.FakeCodexCliProvider;
 import org.tavall.agentwebmcp.support.FakeServiceProvider;
-import org.tavall.dependency.maps.interfaces.IDependencyMap;
-import org.tavall.scheduler.interfaces.ICustomScheduler;
 
 import java.nio.file.Path;
+import java.time.Instant;
 
-import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 class AgentWebMcpRuntimeTest {
     @TempDir Path dataDirectory;
 
     @Test
-    void registersRuntimeDependenciesInTavallDiAndOwnsLifecycleServices() {
-        FakeServiceProvider services = new FakeServiceProvider();
-        FakeCodexCliProvider codex = new FakeCodexCliProvider();
+    void serializesJavaTimeAsIsoDateTimeTextForBrowserAndMcpContracts() throws Exception {
         try (AgentWebMcpRuntime runtime = AgentWebMcpRuntime.builder()
-                .serviceProvider(services)
-                .codexCliProvider(codex)
+                .serviceProvider(new FakeServiceProvider())
+                .codexCliProvider(new FakeCodexCliProvider())
                 .dataDirectory(dataDirectory)
                 .build()) {
-            IDependencyMap dependencies = runtime.dependencyMap();
-            assertSame(runtime, dependencies.getInstance(AgentWebMcpRuntime.class));
-            assertSame(runtime.objectMapper(), dependencies.getInstance(ObjectMapper.class));
-            assertSame(runtime.catalog(), dependencies.getInstance(OperationCatalog.class));
-            assertSame(runtime.context(), dependencies.getInstance(OperationContext.class));
-            assertSame(runtime.executor(), dependencies.getInstance(OperationExecutor.class));
-            assertSame(services, dependencies.getInstance(ServiceProvider.class));
-            assertSame(codex, dependencies.getInstance(CodexCliProvider.class));
-            assertSame(runtime.dependencyMap().getInstance(ICustomScheduler.class), dependencies.getInstance(ICustomScheduler.class));
+            Instant heartbeat = Instant.parse("2026-09-04T05:00:00.123Z");
+            String json = runtime.objectMapper().writeValueAsString(new AgentSummary(
+                    "codex:local", "Installed Codex CLI", "ONLINE", "local", "test", heartbeat));
+            var tree = runtime.objectMapper().readTree(json);
+            assertEquals(heartbeat.toString(), tree.path("lastHeartbeatAt").asText());
+            assertFalse(tree.path("lastHeartbeatAt").isNumber());
         }
     }
 }
