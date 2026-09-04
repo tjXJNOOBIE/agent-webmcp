@@ -5,14 +5,17 @@ import org.tavall.agentwebmcp.provider.ProviderException;
 import org.tavall.dependency.IDependencyAccess;
 import org.tavall.dependency.annotations.DelegatesTo;
 
+import java.io.File;
 import java.io.IOException;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.attribute.PosixFilePermission;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.UnaryOperator;
 import java.util.regex.Pattern;
@@ -21,6 +24,15 @@ import java.util.regex.Pattern;
 public final class FileJobRepository implements JobRepository, IDependencyAccess {
     private static final Pattern JOB_ID = Pattern.compile("job-[a-f0-9]{12}");
     private static final Pattern JOB_FILE = Pattern.compile("job-[a-f0-9]{12}\\.json");
+    private static final Set<PosixFilePermission> OWNER_DIRECTORY_PERMISSIONS = Set.of(
+            PosixFilePermission.OWNER_READ,
+            PosixFilePermission.OWNER_WRITE,
+            PosixFilePermission.OWNER_EXECUTE
+    );
+    private static final Set<PosixFilePermission> OWNER_FILE_PERMISSIONS = Set.of(
+            PosixFilePermission.OWNER_READ,
+            PosixFilePermission.OWNER_WRITE
+    );
 
     private final Path jobsDirectory;
     private final Object ioLock = new Object();
@@ -97,11 +109,13 @@ public final class FileJobRepository implements JobRepository, IDependencyAccess
         Path temporary = jobsDirectory.resolve(jobId + ".tmp-" + UUID.randomUUID());
         try {
             objectMapper().writeValue(temporary.toFile(), job);
+            restrictOwnerOnly(temporary, false);
             try {
                 Files.move(temporary, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
             } catch (AtomicMoveNotSupportedException ignored) {
                 Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING);
             }
+            restrictOwnerOnly(target, false);
         } catch (IOException exception) {
             try {
                 Files.deleteIfExists(temporary);
@@ -118,8 +132,31 @@ public final class FileJobRepository implements JobRepository, IDependencyAccess
     private void ensureDirectory() {
         try {
             Files.createDirectories(jobsDirectory);
+            restrictOwnerOnly(jobsDirectory, true);
         } catch (IOException exception) {
             throw repositoryFailure("Unable to create job data directory", exception);
+        }
+    }
+
+    private static void restrictOwnerOnly(Path path, boolean directory) throws IOException {
+        try {
+            Files.setPosixFilePermissions(path, directory ? OWNER_DIRECTORY_PERMISSIONS : OWNER_FILE_PERMISSIONS);
+            return;
+        } catch (UnsupportedOperationException ignored) {
+            // Fall through to the portable java.io permission API.
+        }
+
+        File file = path.toFile();
+        boolean secured = file.setReadable(false, false)
+                && file.setWritable(false, false)
+                && file.setExecutable(false, false)
+                && file.setReadable(true, true)
+                && file.setWritable(true, true);
+        if (directory) {
+            secured = secured && file.setExecutable(true, true);
+        }
+        if (!secured) {
+            throw new IOException("Unable to enforce owner-only permissions on " + path);
         }
     }
 
