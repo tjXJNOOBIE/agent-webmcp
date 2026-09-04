@@ -147,10 +147,17 @@ public final class ProcessCommandExecutor implements CommandExecutor {
     }
 
     private static void terminate(Process process) {
-        if (process == null || !process.isAlive()) {
+        if (process == null) {
             return;
         }
-        process.destroyForcibly();
+        process.descendants().forEach(child -> {
+            if (child.isAlive()) {
+                child.destroyForcibly();
+            }
+        });
+        if (process.isAlive()) {
+            process.destroyForcibly();
+        }
         try {
             process.waitFor(TERMINATION_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
         } catch (InterruptedException exception) {

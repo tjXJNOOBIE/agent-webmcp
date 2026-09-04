@@ -102,6 +102,7 @@ The MCP adapter supports the deployed session-oriented MCP versions used by curr
 - Git
 - Network access during the Gradle source-dependency build
 - `curl` for the verification helper
+- `curl`, `unzip`, and `sha256sum` when installing the bundled OpenAI Secure MCP Tunnel companion
 
 Clone and install:
 
@@ -181,50 +182,121 @@ flowchart TD
 
 Do **not** expose port `7188` to the public internet for the normal ChatGPT setup. OpenAI Secure MCP Tunnel keeps Agent WebMCP private and has the customer-side `tunnel-client` initiate outbound HTTPS to OpenAI.
 
-### 1. Create the OpenAI tunnel
+### 1. Create the OpenAI tunnel and runtime key
 
 Open:
 
 - Tunnels: `https://platform.openai.com/settings/organization/tunnels`
 - Runtime API keys: `https://platform.openai.com/settings/organization/api-keys`
 
-Create a tunnel and copy its `tunnel_...` ID. Create a **runtime** API key whose principal has **Tunnels Read + Use** for that tunnel. Do not use a long-lived admin key for the tunnel daemon.
+Create the tunnel in the same organization/workspace where the ChatGPT app will be created, then copy its `tunnel_...` ID.
 
-Download the supported `tunnel-client` from the Tunnels page or the official release page:
+Create a **Restricted Runtime API key** for the long-lived tunnel daemon. The key principal needs:
 
-`https://github.com/openai/tunnel-client/releases/latest`
+- **Tunnels: Read**
+- **Tunnels: Use**
 
-Start with:
+Do not use an OpenAI admin key and do not select broad `All` access for the daemon. `CONTROL_PLANE_TUNNEL_ID` identifies the tunnel; `CONTROL_PLANE_API_KEY` is the runtime secret used by `tunnel-client doctor` and `tunnel-client run`. If Platform also displays a separate key identifier, keep that identifier for inventory/auditing; the daemon still needs the actual secret value in `CONTROL_PLANE_API_KEY`.
+
+Never commit the runtime secret, paste it into `.app.json`, put it in plugin metadata, or pass it as a literal command-line argument that will land in shell/process history.
+
+Agent WebMCP treats OpenAI's official `tunnel-client` as a first-class optional transport companion. The installer pins **v0.0.14**, verifies the official release SHA-256, preserves the OpenAI license/notice/SBOM metadata, and installs the tunnel daemon beside Agent WebMCP.
+
+### 2. Save the runtime secret in a protected local file
+
+For a normal user-service install:
 
 ```bash
-tunnel-client help quickstart
-tunnel-client help samples
+umask 077
+mkdir -p ~/.config/agent-webmcp
+read -rsp 'OpenAI tunnel runtime API key: ' CONTROL_PLANE_API_KEY
+printf '\n'
+printf '%s\n' "$CONTROL_PLANE_API_KEY" > ~/.config/agent-webmcp/tunnel-runtime.key
+chmod 600 ~/.config/agent-webmcp/tunnel-runtime.key
+unset CONTROL_PLANE_API_KEY
 ```
 
-### 2. Configure the tunnel for Agent WebMCP
+The key file is an installation input. Agent WebMCP copies the secret into its owner-only `agent-webmcp-tunnel.env`; the secret is never written to the repository.
 
-The private MCP target is:
+For a root/system-service install, place the temporary key file somewhere root can read with mode `600`, then remove that temporary copy after installation. The resulting `/etc/agent-webmcp/agent-webmcp-tunnel.env` remains the protected service configuration.
+
+### 3. Install Agent WebMCP with the tunnel companion
+
+The private MCP target remains:
 
 ```text
 http://127.0.0.1:7188/mcp
 ```
 
-A named profile is convenient:
+Use the tunnel ID plus the protected key file:
 
 ```bash
-export CONTROL_PLANE_API_KEY='sk-...'
-
-tunnel-client init \
-  --sample sample_mcp_remote_no_auth \
-  --profile agent-webmcp \
+./scripts/install.sh \
+  --with-tunnel \
   --tunnel-id tunnel_0123456789abcdef0123456789abcdef \
-  --mcp-server-url http://127.0.0.1:7188/mcp
-
-tunnel-client doctor --profile agent-webmcp --explain
-tunnel-client run --profile agent-webmcp
+  --tunnel-key-file ~/.config/agent-webmcp/tunnel-runtime.key
 ```
 
-Keep `tunnel-client run` alive while ChatGPT is scanning or using the app. For a separately supervised long-lived tunnel, use the lifecycle facilities provided by `tunnel-client` rather than improvising `nohup`.
+The installer creates an owner-only `agent-webmcp-tunnel.env` containing:
+
+```text
+CONTROL_PLANE_TUNNEL_ID=tunnel_...
+CONTROL_PLANE_API_KEY=<runtime secret>
+MCP_SERVER_URL=http://127.0.0.1:7188/mcp
+```
+
+It also installs the pinned OpenAI client under the Agent WebMCP prefix and creates `agent-webmcp-tunnel.service` alongside `agent-webmcp.service`. The companion requires and starts after Agent WebMCP; no inbound public listener is added.
+
+For a full system-service install:
+
+```bash
+bash ./scripts/gradle installDist
+sudo ./scripts/install.sh \
+  --dist "$PWD/build/install/agent-webmcp" \
+  --system-service \
+  --with-tunnel \
+  --tunnel-id tunnel_0123456789abcdef0123456789abcdef \
+  --tunnel-key-file /path/to/root-readable/tunnel-runtime.key
+```
+
+The installer never needs or stores an OpenAI admin key.
+
+For a portable `--no-service` install, the same tunnel flags install the client and protected tunnel environment file, then print the exact manual `tunnel-client run` command.
+
+### 4. Verify the local runtime and tunnel before creating the ChatGPT app
+
+Do not start with **Scan Tools** in ChatGPT. First prove the local MCP server and the tunnel daemon are both healthy.
+
+User-service install:
+
+```bash
+curl -fsS http://127.0.0.1:7188/health
+systemctl --user status agent-webmcp.service
+systemctl --user status agent-webmcp-tunnel.service
+
+set -a
+. ~/.config/agent-webmcp/agent-webmcp-tunnel.env
+set +a
+~/.local/share/agent-webmcp/tunnel/tunnel-client doctor --explain
+```
+
+Useful tunnel logs:
+
+```bash
+journalctl --user -u agent-webmcp-tunnel.service -n 100 --no-pager
+```
+
+System-service install:
+
+```bash
+sudo systemctl status agent-webmcp.service
+sudo systemctl status agent-webmcp-tunnel.service
+sudo journalctl -u agent-webmcp-tunnel.service -n 100 --no-pager
+```
+
+OpenAI's tunnel client exposes local health/readiness diagnostics when its health listener is enabled. A launched process is not enough: startup/downstream checks must be ready before ChatGPT can reliably scan the connector. If `doctor --explain` reports `401`/`403`, confirm the runtime-key principal has **Tunnels Read + Use** and that the tunnel is scoped to the same ChatGPT workspace.
+
+Keep the tunnel companion healthy while ChatGPT is scanning or using the app.
 
 ### Tunnel flow
 
@@ -243,19 +315,27 @@ No inbound public firewall rule is required for Agent WebMCP in this design.
 
 Current ChatGPT custom-app setup scans the MCP server tools and creates a draft app. With Secure MCP Tunnel, choose the **Tunnel** connection mode and select/paste your `tunnel_id`; do not paste the private `127.0.0.1` URL into ChatGPT.
 
-1. Make sure Agent WebMCP is healthy.
-2. Make sure `tunnel-client doctor --profile agent-webmcp --explain` succeeds.
-3. Keep `tunnel-client run --profile agent-webmcp` running.
-4. In ChatGPT, enable Developer Mode where your plan/workspace supports it.
+1. Verify `http://127.0.0.1:7188/health`.
+2. Verify `tunnel-client doctor --explain`.
+3. Verify `agent-webmcp-tunnel.service` is running and its logs show the tunnel runtime is healthy.
+4. Only then enable Developer Mode in ChatGPT where your plan/workspace supports it.
 5. Open **Settings / Workspace settings → Apps → Create**.
 6. Name the app **Agent WebMCP**.
 7. Choose **Tunnel** and select or paste the created `tunnel_...` ID.
-8. Use **No Auth** for the MCP target. The tunnel runtime key belongs to `tunnel-client`, not to ChatGPT app fields.
+8. Use **No Auth** for the MCP target. The tunnel runtime key belongs only to the local `tunnel-client`; do not paste it into ChatGPT app fields.
 9. Click **Scan Tools**. The scan should discover exactly the 16 app-facing tools listed above.
 10. Click **Create**. The app should appear as a draft/development app.
 11. Start a new chat with Agent WebMCP selected and test a read-only call first, for example: `Show the current Agent WebMCP system status.`
 12. Then test logs: `Show the latest logs for demo.service.`
 13. Only after read paths work, test a write action such as restart against a disposable/non-production service.
+
+If the tunnel exists in Platform but does not appear or scan in ChatGPT, check these in order:
+
+1. the tunnel is scoped to the same ChatGPT workspace;
+2. the operator/runtime-key principal has **Tunnels Read + Use**;
+3. `agent-webmcp.service` is healthy on `127.0.0.1:7188`;
+4. `agent-webmcp-tunnel.service` is actually running;
+5. `tunnel-client doctor --explain` succeeds with the same runtime key used by the daemon.
 
 ```mermaid
 flowchart TD
@@ -312,15 +392,16 @@ flowchart TD
     B --> C[Run scripts/install.sh]
     C --> D[Agent WebMCP user service starts]
     D --> E[verify-install.sh checks health + MCP initialize + tools/list]
-    E --> F[Create OpenAI tunnel + runtime key]
-    F --> G[Configure tunnel-client profile to 127.0.0.1:7188/mcp]
-    G --> H[tunnel-client doctor]
-    H --> I[tunnel-client run]
-    I --> J[Create ChatGPT custom app in Tunnel mode]
-    J --> K[Scan 16 bounded MCP tools]
-    K --> L[Test read-only health/log operations]
-    L --> M[Test service lifecycle action on safe service]
-    M --> N[Verify observed service state/logs]
+    E --> F[Create OpenAI tunnel + Restricted runtime key]
+    F --> G[Store key in protected local file]
+    G --> H[Install with --with-tunnel + tunnel ID + key file]
+    H --> I[agent-webmcp-tunnel.service]
+    I --> J[tunnel-client doctor succeeds]
+    J --> K[Create ChatGPT custom app in Tunnel mode]
+    K --> L[Scan 16 bounded MCP tools]
+    L --> M[Test read-only health/log operations]
+    M --> N[Test service lifecycle action on safe service]
+    N --> O[Verify observed service state/logs]
 ```
 
 ## Development and validation

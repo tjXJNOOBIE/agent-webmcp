@@ -47,6 +47,17 @@ class ProcessCommandExecutorTest {
     }
 
     @Test
+    void boundsStdinWriteInsideTheSameProcessDeadline() {
+        Instant started = Instant.now();
+        CommandResult result = executor.execute(
+                List.of("sh", "-c", "sleep 10"),
+                Duration.ofMillis(150),
+                "x".repeat(1_048_576));
+        assertTrue(result.timedOut());
+        assertTrue(Duration.between(started, Instant.now()).compareTo(Duration.ofSeconds(3)) < 0);
+    }
+
+    @Test
     void forciblyTerminatesProviderProcessAtTimeout() {
         Instant started = Instant.now();
         CommandResult result = executor.execute(List.of("sleep", "10"), Duration.ofMillis(100));

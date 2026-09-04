@@ -1,6 +1,7 @@
 package org.tavall.agentwebmcp;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import org.tavall.agentwebmcp.operation.DefaultOperationCatalog;
 import org.tavall.agentwebmcp.operation.DeferredOperationInvoker;
 import org.tavall.agentwebmcp.operation.OperationCatalog;
@@ -161,6 +162,9 @@ public final class AgentWebMcpRuntime implements IDependencyAccess, AutoCloseabl
             ObjectMapper resolvedObjectMapper = objectMapper == null
                     ? new ObjectMapper().findAndRegisterModules()
                     : objectMapper;
+            // Agent WebMCP's JSON contract uses RFC 3339 / ISO-8601 text for java.time values.
+            // Numeric epoch seconds are ambiguous to browser Date, which interprets numbers as milliseconds.
+            resolvedObjectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
             dependencies.registerInstance(ObjectMapper.class, resolvedObjectMapper);
 
             OperationCatalog resolvedCatalog = catalog == null ? DefaultOperationCatalog.create() : catalog;

@@ -3,6 +3,7 @@ package org.tavall.agentwebmcp.provider.service;
 import org.tavall.agentwebmcp.provider.ProviderException;
 import org.tavall.agentwebmcp.provider.process.CommandExecutor;
 import org.tavall.agentwebmcp.provider.process.CommandResult;
+import org.tavall.agentwebmcp.service.ServiceIdSyntax;
 import org.tavall.dependency.DependencyAccess;
 import org.tavall.dependency.annotations.DelegatesTo;
 
@@ -13,11 +14,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.regex.Pattern;
 
 @DelegatesTo(ServiceProvider.class)
 public final class SystemdServiceProvider implements ServiceProvider, DependencyAccess<CommandExecutor> {
-    private static final Pattern SERVICE_ID = Pattern.compile("[A-Za-z0-9_.@:-]+");
     private final Duration commandTimeout;
 
     private SystemdServiceProvider(Builder builder) {
@@ -51,7 +50,7 @@ public final class SystemdServiceProvider implements ServiceProvider, Dependency
         List<ServiceSummary> services = new ArrayList<>();
         result.stdout().lines().map(String::trim).filter(line -> !line.isEmpty()).forEach(line -> {
             String[] columns = line.split("\s+", 5);
-            if (columns.length >= 4) {
+            if (columns.length >= 4 && ServiceIdSyntax.isValid(columns[0])) {
                 services.add(new ServiceSummary(
                         columns[0],
                         columns.length == 5 ? columns[4] : columns[0],
@@ -66,7 +65,7 @@ public final class SystemdServiceProvider implements ServiceProvider, Dependency
     @Override
     public ServiceDetails inspectService(String serviceId) {
         ensureAvailable();
-        String validServiceId = requireServiceId(serviceId);
+        String validServiceId = ServiceIdSyntax.require(serviceId);
         CommandResult result = run(List.of(
                 "systemctl", "show", validServiceId, "--no-pager",
                 "--property=Id,Description,LoadState,ActiveState,SubState,MainPID,MemoryCurrent,CPUUsageNSec,FragmentPath,WorkingDirectory,UnitFileState"
@@ -112,7 +111,7 @@ public final class SystemdServiceProvider implements ServiceProvider, Dependency
     @Override
     public ServiceLogSlice readLogs(String serviceId, int lines, Optional<String> cursor) {
         ensureAvailable();
-        String validServiceId = requireServiceId(serviceId);
+        String validServiceId = ServiceIdSyntax.require(serviceId);
         if (lines < 1 || lines > 1000) {
             throw new IllegalArgumentException("lines must be between 1 and 1000");
         }
@@ -138,7 +137,7 @@ public final class SystemdServiceProvider implements ServiceProvider, Dependency
 
     private ServiceMutationResult mutate(String serviceId, String action) {
         ensureAvailable();
-        String validServiceId = requireServiceId(serviceId);
+        String validServiceId = ServiceIdSyntax.require(serviceId);
         run(List.of("systemctl", action, validServiceId));
         return new ServiceMutationResult(validServiceId, action, inspectService(validServiceId));
     }
@@ -167,13 +166,6 @@ public final class SystemdServiceProvider implements ServiceProvider, Dependency
         if (!available()) {
             throw new ProviderException("SERVICE_PROVIDER_UNAVAILABLE", "systemd is not available on this target", 503);
         }
-    }
-
-    private static String requireServiceId(String serviceId) {
-        if (serviceId == null || serviceId.isBlank() || !SERVICE_ID.matcher(serviceId).matches()) {
-            throw new IllegalArgumentException("serviceId contains unsupported characters");
-        }
-        return serviceId;
     }
 
     private static Map<String, String> parseProperties(String output) {

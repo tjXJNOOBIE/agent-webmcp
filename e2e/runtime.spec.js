@@ -120,8 +120,16 @@ test('Streamable HTTP MCP exposes exactly 16 bounded tools', async ({ request })
     headers, data: { jsonrpc: '2.0', id: 'tools-e2e', method: 'tools/list', params: {} }
   });
   expect(toolsResponse.ok()).toBeTruthy();
-  const names = (await toolsResponse.json()).result.tools.map((tool) => tool.name);
+  const toolDescriptors = (await toolsResponse.json()).result.tools;
+  const names = toolDescriptors.map((tool) => tool.name);
   expect(names).toHaveLength(16);
+  const statusTool = toolDescriptors.find((tool) => tool.name === 'system.status');
+  expect(statusTool?._meta?.ui?.resourceUri).toBe('ui://agent-webmcp/fleet-cockpit-v1');
+  expect(statusTool?._meta?.['openai/outputTemplate']).toBe('ui://agent-webmcp/fleet-cockpit-v1');
+  for (const tool of toolDescriptors.filter((candidate) => candidate.name !== 'system.status')) {
+    expect(tool?._meta?.ui?.resourceUri).toBeUndefined();
+    expect(tool?._meta?.['openai/outputTemplate']).toBeUndefined();
+  }
   expect(names).toEqual(expect.arrayContaining([
     'system.status', 'agent.list', 'agent.inspect', 'service.logs', 'service.diagnostics', 'service.restart',
     'job.list', 'job.inspect', 'job.logs'
@@ -129,6 +137,31 @@ test('Streamable HTTP MCP exposes exactly 16 bounded tools', async ({ request })
   for (const hidden of ['service.add', 'service.remove', 'service.discover', 'job.execute', 'job.cancel', 'target.list', 'target.inspect']) {
     expect(names).not.toContain(hidden);
   }
+
+  const resourcesResponse = await request.post('/mcp', {
+    headers, data: { jsonrpc: '2.0', id: 'resources-e2e', method: 'resources/list', params: {} }
+  });
+  expect(resourcesResponse.ok()).toBeTruthy();
+  const resources = (await resourcesResponse.json()).result.resources;
+  expect(resources).toHaveLength(1);
+  expect(resources[0]).toMatchObject({
+    uri: 'ui://agent-webmcp/fleet-cockpit-v1',
+    mimeType: 'text/html;profile=mcp-app'
+  });
+  expect(resources[0]._meta.ui.prefersBorder).toBe(true);
+  expect(resources[0]._meta.ui.csp.connectDomains).toEqual([]);
+  expect(resources[0]._meta.ui.csp.resourceDomains).toEqual([]);
+
+  const appResponse = await request.post('/mcp', {
+    headers,
+    data: { jsonrpc: '2.0', id: 'resource-read-e2e', method: 'resources/read', params: { uri: resources[0].uri } }
+  });
+  expect(appResponse.ok()).toBeTruthy();
+  const appHtml = (await appResponse.json()).result.contents[0].text;
+  expect(appHtml).toContain('ui/initialize');
+  expect(appHtml).toContain('ui/notifications/tool-result');
+  expect(appHtml).toContain('tools/call');
+  expect(appHtml).not.toContain("fetch('/api");
 
   const call = await request.post('/mcp', {
     headers,

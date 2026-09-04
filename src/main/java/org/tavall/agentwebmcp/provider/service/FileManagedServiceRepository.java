@@ -1,6 +1,7 @@
 package org.tavall.agentwebmcp.provider.service;
 
 import org.tavall.agentwebmcp.provider.ProviderException;
+import org.tavall.agentwebmcp.service.ServiceIdSyntax;
 import org.tavall.dependency.annotations.DelegatesTo;
 
 import java.io.IOException;
@@ -14,11 +15,9 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
-import java.util.regex.Pattern;
 
 @DelegatesTo(ManagedServiceRepository.class)
 public final class FileManagedServiceRepository implements ManagedServiceRepository {
-    private static final Pattern SERVICE_ID = Pattern.compile("[A-Za-z0-9_.@:-]+");
     private final Path file;
     private final Object ioLock = new Object();
 
@@ -39,7 +38,7 @@ public final class FileManagedServiceRepository implements ManagedServiceReposit
 
     @Override
     public boolean contains(String serviceId) {
-        String validServiceId = requireServiceId(serviceId);
+        String validServiceId = ServiceIdSyntax.require(serviceId);
         synchronized (ioLock) {
             return readUnlocked().contains(validServiceId);
         }
@@ -47,7 +46,7 @@ public final class FileManagedServiceRepository implements ManagedServiceReposit
 
     @Override
     public boolean add(String serviceId) {
-        String validServiceId = requireServiceId(serviceId);
+        String validServiceId = ServiceIdSyntax.require(serviceId);
         synchronized (ioLock) {
             Set<String> services = readUnlocked();
             boolean changed = services.add(validServiceId);
@@ -60,7 +59,7 @@ public final class FileManagedServiceRepository implements ManagedServiceReposit
 
     @Override
     public boolean remove(String serviceId) {
-        String validServiceId = requireServiceId(serviceId);
+        String validServiceId = ServiceIdSyntax.require(serviceId);
         synchronized (ioLock) {
             Set<String> services = readUnlocked();
             boolean changed = services.remove(validServiceId);
@@ -80,7 +79,7 @@ public final class FileManagedServiceRepository implements ManagedServiceReposit
             for (String line : Files.readAllLines(file)) {
                 String serviceId = line.trim();
                 if (!serviceId.isEmpty()) {
-                    services.add(requireServiceId(serviceId));
+                    services.add(ServiceIdSyntax.require(serviceId));
                 }
             }
             return services;
@@ -104,13 +103,6 @@ public final class FileManagedServiceRepository implements ManagedServiceReposit
         } catch (IOException exception) {
             throw repositoryFailure("Unable to persist managed services", exception);
         }
-    }
-
-    private static String requireServiceId(String serviceId) {
-        if (serviceId == null || serviceId.isBlank() || !SERVICE_ID.matcher(serviceId).matches()) {
-            throw new IllegalArgumentException("serviceId contains unsupported characters");
-        }
-        return serviceId;
     }
 
     private static ProviderException repositoryFailure(String message, Exception exception) {

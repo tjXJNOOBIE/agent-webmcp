@@ -86,17 +86,4 @@ tasks.register<JavaExec>("panelFixture") {
     mainClass.set("org.tavall.agentwebmcp.support.PanelFixtureApplication")
 }
 
-val writePanelFixtureClasspath = tasks.register("writePanelFixtureClasspath") {
-    group = "verification"
-    description = "Writes the already-resolved panel fixture runtime classpath for browser CI."
-    dependsOn(tasks.named("testClasses"))
-    val outputFile = layout.buildDirectory.file("ci/panel-fixture-classpath.txt")
-    outputs.file(outputFile)
-    doLast {
-        val output = outputFile.get().asFile
-        output.parentFile.mkdirs()
-        output.writeText(sourceSets["test"].runtimeClasspath.asPath)
-    }
-}
-
 tasks.named("check") { dependsOn(e2e) }

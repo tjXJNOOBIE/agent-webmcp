@@ -30,6 +30,19 @@ class SystemdServiceProviderTest {
     }
 
     @Test
+    void acceptsSystemdEscapedServiceIdentifiersAsLiteralArguments() {
+        FakeCommandExecutor commands = registerCommands();
+        SystemdServiceProvider provider = SystemdServiceProvider.builder().build();
+        String escaped = "systemd-fsck@dev-disk-by\\x2dlabel-UEFI.service";
+
+        provider.inspectService(escaped);
+
+        assertTrue(commands.commands.stream().anyMatch(command ->
+                command.size() >= 3 && command.get(0).equals("systemctl")
+                        && command.get(1).equals("show") && command.get(2).equals(escaped)));
+    }
+
+    @Test
     void rejectsShellLikeServiceIdentifiersBeforeExecution() {
         FakeCommandExecutor commands = registerCommands();
         SystemdServiceProvider provider = SystemdServiceProvider.builder().build();

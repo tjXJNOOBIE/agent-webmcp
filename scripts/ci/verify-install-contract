@@ -3,14 +3,14 @@ set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 DIST="$ROOT/build/install/agent-webmcp"
-TEST_ROOT="$ROOT/test-results/install-contract"
+TEST_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/agent-webmcp-install-contract.XXXXXX")
+trap 'rm -rf "$TEST_ROOT"' EXIT
 FAKE_BIN="$TEST_ROOT/bin"
 HOME_DIR="$TEST_ROOT/home"
 PREFIX="$TEST_ROOT/install"
 CONFIG="$TEST_ROOT/config"
 STATE="$TEST_ROOT/state"
 
-rm -rf "$TEST_ROOT"
 mkdir -p "$FAKE_BIN" "$HOME_DIR"
 
 cat > "$FAKE_BIN/systemctl" <<'SYSTEMCTL'
@@ -73,6 +73,15 @@ PATH="$TEST_PATH" HOME="$HOME_DIR" sh "$ROOT/scripts/install.sh" \
   --config-dir "$CONFIG" \
   --state-dir "$STATE" \
   --no-service > "$TEST_ROOT/install.out"
+
+if [ "$(stat -c '%a' "$CONFIG")" != "700" ] || [ "$(stat -c '%a' "$STATE")" != "700" ]; then
+  echo 'Installer did not restrict config/state directories to owner-only access' >&2
+  exit 1
+fi
+if [ "$(stat -c '%a' "$CONFIG/agent-webmcp.env")" != "600" ]; then
+  echo 'Installer did not restrict environment configuration to owner-only access' >&2
+  exit 1
+fi
 
 if ! grep -Fxq 'demo.service' "$STATE/managed-services.txt"; then
   echo 'Deterministic install discovery did not register the fixture service' >&2

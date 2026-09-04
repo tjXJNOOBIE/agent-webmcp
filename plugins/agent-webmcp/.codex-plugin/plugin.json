@@ -1,7 +1,7 @@
 {
   "name": "agent-webmcp",
-  "version": "0.2.0",
-  "description": "Operate local services through Agent WebMCP, including the shared Tavall Cloud tunnel federation used by this workspace.",
+  "version": "0.3.0",
+  "description": "Operate Agent WebMCP's canonical service, agent, discovery, and durable-job workflows while preserving its bounded MCP and WebMCP authority surfaces.",
   "author": {
     "name": "tjXJNOOBIE",
     "url": "https://github.com/tjXJNOOBIE"
@@ -10,18 +10,20 @@
   "repository": "https://github.com/tjXJNOOBIE/agent-webmcp",
   "keywords": [
     "mcp",
+    "mcp-app",
+    "webmcp",
     "operations",
     "systemd",
     "services",
-    "logs",
-    "health",
-    "tavall-cloud"
+    "agents",
+    "jobs",
+    "discovery"
   ],
   "skills": "./skills/",
   "interface": {
     "displayName": "Agent WebMCP",
-    "shortDescription": "Inspect and control local services through bounded MCP operations",
-    "longDescription": "Use Agent WebMCP to inspect system health and metrics, inspect managed services, read bounded logs, and perform service lifecycle actions. In the Tavall workspace, the skill uses Agent WebMCP tools federated through the already-connected Tavall Cloud app and Secure MCP Tunnel instead of creating a second tunnel.",
+    "shortDescription": "Operate bounded local services, agents, discovery, and durable jobs",
+    "longDescription": "Understand and use Agent WebMCP's 23-operation canonical runtime, its 18-tool browser-native WebMCP projection, and its intentionally narrower 16-tool remote MCP projection. The skill covers managed-service inspection and lifecycle, deterministic and optional Codex-assisted discovery, durable service jobs, runtime Agent Registry monitoring, and the Fleet Cockpit MCP App reached through a dedicated Agent WebMCP Secure MCP Tunnel.",
     "developerName": "tjXJNOOBIE",
     "category": "Developer Tools",
     "capabilities": [
@@ -31,9 +33,9 @@
     ],
     "websiteURL": "https://github.com/tjXJNOOBIE/agent-webmcp",
     "defaultPrompt": [
-      "Show the current Agent WebMCP system and service health.",
-      "Show the latest bounded logs for a managed service and explain any failures.",
-      "Restart a managed service and verify its observed state afterward."
+      "Inspect the current Agent WebMCP system, agents, and managed-service health.",
+      "Discover operator services safely and explain which candidates were accepted or rejected.",
+      "Inspect durable Agent WebMCP jobs, their execution trace, logs, and agent attribution."
     ],
     "screenshots": []
   }
