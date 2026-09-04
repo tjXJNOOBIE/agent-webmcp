@@ -6,9 +6,10 @@ import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import org.tavall.agentwebmcp.AgentWebMcpRuntime;
+import org.tavall.agentwebmcp.AuthMode;
+import org.tavall.agentwebmcp.mcp.McpHttpHandler;
 import org.tavall.agentwebmcp.operation.OperationExecution;
 import org.tavall.agentwebmcp.operation.OperationExecutionStatus;
-import org.tavall.agentwebmcp.mcp.McpHttpHandler;
 import org.tavall.dependency.DependencyAccess;
 import org.tavall.internal.utils.concurrent.AsyncTask;
 
@@ -38,6 +39,9 @@ public final class AgentWebMcpHttpServer implements AutoCloseable, DependencyAcc
 
     private AgentWebMcpHttpServer(Builder builder) {
         this.objectMapper = runtime().objectMapper();
+        if (runtime().context().authMode() == AuthMode.NO_AUTH && !HttpRequestSecurityPolicy.isLoopbackHost(builder.host)) {
+            throw new IllegalArgumentException("NO_AUTH requires a loopback bind host; use a trusted local/private tunnel for remote access");
+        }
         try {
             this.server = HttpServer.create(new InetSocketAddress(builder.host, builder.port), 0);
         } catch (IOException exception) {
@@ -133,6 +137,14 @@ public final class AgentWebMcpHttpServer implements AutoCloseable, DependencyAcc
         }
         if (!"POST".equals(exchange.getRequestMethod())) {
             methodNotAllowed(exchange, "POST");
+            return;
+        }
+        if (!HttpRequestSecurityPolicy.originAllowed(exchange)) {
+            writeJson(exchange, 403, errorBody("ORIGIN_NOT_ALLOWED", "Origin is not allowed"));
+            return;
+        }
+        if (!HttpRequestSecurityPolicy.hasJsonContentType(exchange)) {
+            writeJson(exchange, 415, errorBody("UNSUPPORTED_MEDIA_TYPE", "Mutating operation requests require application/json"));
             return;
         }
 
