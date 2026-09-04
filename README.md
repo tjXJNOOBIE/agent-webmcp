@@ -4,7 +4,7 @@
 
 [Devpost project](https://devpost.com/software/agent-webmcp) · [Source](https://github.com/tjXJNOOBIE/agent-webmcp) · [Download source ZIP](https://github.com/tjXJNOOBIE/agent-webmcp/archive/refs/heads/main.zip) · [Download plugin ZIP](dist/agent-webmcp-plugin.zip)
 
-![Browser-Native WebMCP Registration](docs/hackathon/devpost/webmcp-registration-flow.svg)
+![Agent WebMCP Fleet Cockpit](docs/hackathon/product/fleet-cockpit.jpg)
 
 ## Why Agent WebMCP
 
@@ -28,7 +28,28 @@ Agent WebMCP is a lightweight Java operations runtime and Fleet Cockpit for:
 
 The canonical runtime currently owns **23 operations**, including **9 mutating operations**. The browser-native WebMCP projection exposes **18 tools**. The intentionally narrower remote MCP projection exposes **16 tools**.
 
-![One Catalog, Multiple Surfaces](docs/hackathon/devpost/one-catalog-multiple-surfaces.svg)
+## Fleet Cockpit
+
+The Fleet Cockpit is the human side of the same operation model exposed to agents. It keeps service control, operation discovery, activity, jobs, agent monitoring, target selection, and exposure settings visible instead of hiding the product behind a chat wrapper.
+
+<table>
+<tr>
+<td width="50%"><strong>Operations</strong><br><img src="docs/hackathon/product/operations.jpg" alt="Agent WebMCP Operations registry"></td>
+<td width="50%"><strong>Service Control</strong><br><img src="docs/hackathon/product/service-control.jpg" alt="Agent WebMCP Service Control runtime inspector"></td>
+</tr>
+<tr>
+<td width="50%"><strong>Activity</strong><br><img src="docs/hackathon/product/activity.jpg" alt="Agent WebMCP Activity ledger"></td>
+<td width="50%"><strong>Catalog</strong><br><img src="docs/hackathon/product/catalog.jpg" alt="Agent WebMCP operation catalog projection matrix"></td>
+</tr>
+<tr>
+<td width="50%"><strong>Agents</strong><br><img src="docs/hackathon/product/agents.jpg" alt="Agent WebMCP agent registry"></td>
+<td width="50%"><strong>Jobs</strong><br><img src="docs/hackathon/product/jobs.jpg" alt="Agent WebMCP durable jobs create and execution workspace"></td>
+</tr>
+<tr>
+<td width="50%"><strong>Target Switcher</strong><br><img src="docs/hackathon/product/target-switcher.jpg" alt="Agent WebMCP target switcher comparison view"></td>
+<td width="50%"><strong>Settings</strong><br><img src="docs/hackathon/product/settings.jpg" alt="Agent WebMCP security and exposure settings"></td>
+</tr>
+</table>
 
 ## Browser-native WebMCP
 
@@ -36,9 +57,7 @@ The production page registers operations directly with WebMCP. Each exposed tool
 
 That means a service restart means the same thing whether it came from a button, HTTP, CLI, or an agent using WebMCP.
 
-![Human + Agent Operations Flow](docs/hackathon/devpost/human-agent-operations-flow.svg)
-
-![Human-Agent Collaboration Loop](docs/hackathon/devpost/human-agent-collaboration-loop.svg)
+![One Catalog, Multiple Surfaces](docs/hackathon/devpost/one-catalog-multiple-surfaces.svg)
 
 ## Bounded by design
 
@@ -54,8 +73,6 @@ Agent WebMCP is operations software, not a prettier remote shell.
 - `NO_AUTH` is intended for a trusted local/private boundary, not casual public exposure.
 
 ![Bounded Safety Model](docs/hackathon/devpost/bounded-safety-model.svg)
-
-![Services and Durable Jobs](docs/hackathon/devpost/service-job-architecture.svg)
 
 ## Install
 
