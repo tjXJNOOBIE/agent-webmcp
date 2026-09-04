@@ -4,18 +4,31 @@ set -euo pipefail
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 DIST="$ROOT/build/install/agent-webmcp"
 TEST_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/agent-webmcp-install-contract.XXXXXX")
-trap 'rm -rf "$TEST_ROOT"' EXIT
 FAKE_BIN="$TEST_ROOT/bin"
 HOME_DIR="$TEST_ROOT/home"
 PREFIX="$TEST_ROOT/install"
 CONFIG="$TEST_ROOT/config"
 STATE="$TEST_ROOT/state"
+SYSTEMCTL_LOG="$TEST_ROOT/systemctl.log"
+SERVER_PID=""
+
+cleanup() {
+  if [ -n "$SERVER_PID" ]; then
+    kill "$SERVER_PID" >/dev/null 2>&1 || true
+    wait "$SERVER_PID" >/dev/null 2>&1 || true
+  fi
+  rm -rf "$TEST_ROOT"
+}
+trap cleanup EXIT HUP INT TERM
 
 mkdir -p "$FAKE_BIN" "$HOME_DIR"
 
 cat > "$FAKE_BIN/systemctl" <<'SYSTEMCTL'
 #!/usr/bin/env sh
 set -eu
+if [ -n "${SYSTEMCTL_LOG:-}" ]; then
+  printf '%s\n' "$*" >> "$SYSTEMCTL_LOG"
+fi
 case "${1:-}" in
   --version)
     echo 'systemd 999 (Agent WebMCP fixture)'
@@ -67,11 +80,21 @@ if ! grep -Fq 'port must be between 1 and 65535' "$TEST_ROOT/invalid-port.out"; 
   exit 1
 fi
 
+PORT=$(python3 - <<'PY'
+import socket
+sock = socket.socket()
+sock.bind(('127.0.0.1', 0))
+print(sock.getsockname()[1])
+sock.close()
+PY
+)
+
 PATH="$TEST_PATH" HOME="$HOME_DIR" sh "$ROOT/scripts/install.sh" \
   --dist "$DIST" \
   --prefix "$PREFIX" \
   --config-dir "$CONFIG" \
   --state-dir "$STATE" \
+  --port "$PORT" \
   --no-service > "$TEST_ROOT/install.out"
 
 if [ "$(stat -c '%a' "$CONFIG")" != "700" ] || [ "$(stat -c '%a' "$STATE")" != "700" ]; then
@@ -82,7 +105,6 @@ if [ "$(stat -c '%a' "$CONFIG/agent-webmcp.env")" != "600" ]; then
   echo 'Installer did not restrict environment configuration to owner-only access' >&2
   exit 1
 fi
-
 if ! grep -Fxq 'demo.service' "$STATE/managed-services.txt"; then
   echo 'Deterministic install discovery did not register the fixture service' >&2
   cat "$TEST_ROOT/install.out" >&2
@@ -97,6 +119,54 @@ if grep -Fq 'discover-services --ai' "$ROOT/scripts/install.sh"; then
   echo 'Installer must never opt into AI service discovery' >&2
   exit 1
 fi
+
+(
+  sleep 1
+  exec env PATH="$TEST_PATH" HOME="$HOME_DIR" \
+    AGENT_WEBMCP_HOST=127.0.0.1 \
+    AGENT_WEBMCP_PORT="$PORT" \
+    AGENT_WEBMCP_DATA_DIR="$STATE" \
+    "$PREFIX/bin/agent-webmcp" serve
+) > "$TEST_ROOT/server.out" 2> "$TEST_ROOT/server.err" &
+SERVER_PID=$!
+if ! PATH="$TEST_PATH" HOME="$HOME_DIR" \
+  AGENT_WEBMCP_HOST=127.0.0.1 AGENT_WEBMCP_PORT="$PORT" \
+  sh "$ROOT/scripts/verify-install.sh" > "$TEST_ROOT/verify.out"; then
+  cat "$TEST_ROOT/server.err" >&2 || true
+  cat "$TEST_ROOT/verify.out" >&2 || true
+  exit 1
+fi
+curl -fsS "http://127.0.0.1:$PORT/" > "$TEST_ROOT/index.html"
+if ! grep -Fq 'Agent WebMCP' "$TEST_ROOT/index.html"; then
+  echo 'Installed application did not serve the Fleet Cockpit root page' >&2
+  exit 1
+fi
+kill "$SERVER_PID" >/dev/null 2>&1 || true
+wait "$SERVER_PID" >/dev/null 2>&1 || true
+SERVER_PID=""
+
+USER_HOME="$TEST_ROOT/user-home"
+USER_PREFIX="$TEST_ROOT/user-install"
+USER_CONFIG="$TEST_ROOT/user-config"
+USER_STATE="$TEST_ROOT/user-state"
+mkdir -p "$USER_HOME"
+: > "$SYSTEMCTL_LOG"
+PATH="$TEST_PATH" SYSTEMCTL_LOG="$SYSTEMCTL_LOG" HOME="$USER_HOME" sh "$ROOT/scripts/install.sh" \
+  --dist "$DIST" \
+  --prefix "$USER_PREFIX" \
+  --config-dir "$USER_CONFIG" \
+  --state-dir "$USER_STATE" \
+  --port "$PORT" > "$TEST_ROOT/user-install.out"
+USER_UNIT="$USER_HOME/.config/systemd/user/agent-webmcp.service"
+if [ ! -f "$USER_UNIT" ]; then
+  echo 'Default install did not create the systemd user unit' >&2
+  exit 1
+fi
+grep -Fq "EnvironmentFile=$USER_CONFIG/agent-webmcp.env" "$USER_UNIT"
+grep -Fq "ExecStart=$USER_PREFIX/bin/agent-webmcp serve" "$USER_UNIT"
+grep -Fq -- '--user daemon-reload' "$SYSTEMCTL_LOG"
+grep -Fq -- '--user enable --now agent-webmcp.service' "$SYSTEMCTL_LOG"
+
 if [ "$(stat -c '%a' "$STATE")" != "700" ]; then
   echo 'Installer state directory is not owner-only' >&2
   stat -c '%a %n' "$STATE" >&2
@@ -108,3 +178,7 @@ echo 'CODEX_ON_FIXTURE_PATH=absent'
 echo 'DETERMINISTIC_DISCOVERY=demo.service'
 echo 'STATE_DIRECTORY_MODE=700'
 echo 'PORT_ZERO=REJECTED'
+echo 'INSTALLED_RUNTIME_HEALTH=PASS'
+echo 'INSTALLED_MCP_VERIFY=PASS'
+echo 'INSTALLED_FLEET_COCKPIT=PASS'
+echo 'DEFAULT_USER_SERVICE_INSTALL=PASS'

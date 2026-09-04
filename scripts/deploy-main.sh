@@ -85,6 +85,13 @@ for ((i=0; i<${#INSTALL_ARGS[@]}; i++)); do
   esac
 done
 
+VERIFY_URL_HOST="$VERIFY_HOST"
+case "$VERIFY_URL_HOST" in
+  \[*\]) ;;
+  *:*) VERIFY_URL_HOST="[$VERIFY_URL_HOST]" ;;
+esac
+HEALTH_URL="http://${VERIFY_URL_HOST}:${VERIFY_PORT}/health"
+
 if [[ "$SYSTEM_SERVICE" -eq 1 ]]; then
   [[ "$PREFIX_SET" -eq 1 ]] || PREFIX="/opt/agent-webmcp"
   [[ "$CONFIG_SET" -eq 1 ]] || CONFIG_DIR="/etc/agent-webmcp"
@@ -120,7 +127,7 @@ if [[ "$NO_SERVICE" -eq 1 ]]; then
   trap cleanup_verification EXIT
   ready=0
   for _ in {1..40}; do
-    if curl -fsS "http://${VERIFY_HOST}:${VERIFY_PORT}/health" >/dev/null 2>&1; then
+    if curl -fsS "$HEALTH_URL" >/dev/null 2>&1; then
       ready=1
       break
     fi
@@ -149,4 +156,4 @@ fi
 
 printf 'AGENT_WEBMCP_DEPLOY_STATUS=VERIFIED\n'
 printf 'AGENT_WEBMCP_DEPLOY_COMMIT=%s\n' "$(git rev-parse HEAD)"
-printf 'AGENT_WEBMCP_HEALTH_URL=http://%s:%s/health\n' "$VERIFY_HOST" "$VERIFY_PORT"
+printf 'AGENT_WEBMCP_HEALTH_URL=%s\n' "$HEALTH_URL"
