@@ -74,6 +74,12 @@ if [ "$PORT" -lt 1 ] || [ "$PORT" -gt 65535 ]; then
   exit 2
 fi
 
+URL_HOST="$HOST"
+case "$URL_HOST" in
+  \[*\]) ;;
+  *:*) URL_HOST="[$URL_HOST]" ;;
+esac
+
 TUNNEL_API_KEY="${CONTROL_PLANE_API_KEY:-}"
 if [ -n "$TUNNEL_KEY_FILE" ]; then
   if [ ! -f "$TUNNEL_KEY_FILE" ]; then
@@ -139,10 +145,6 @@ TUNNEL_STATUS="not installed"
 if [ "$WITH_TUNNEL" -eq 1 ]; then
   TUNNEL_DIR="$PREFIX/tunnel"
   sh "$SCRIPT_DIR/install-openai-tunnel-client.sh" "$TUNNEL_DIR"
-  URL_HOST="$HOST"
-  case "$URL_HOST" in
-    *:*) URL_HOST="[$URL_HOST]" ;;
-  esac
   cat > "$CONFIG_DIR/agent-webmcp-tunnel.env" <<ENV
 CONTROL_PLANE_TUNNEL_ID=$TUNNEL_ID
 CONTROL_PLANE_API_KEY=$TUNNEL_API_KEY
@@ -279,10 +281,13 @@ Agent WebMCP installed.
   data:      $STATE_DIR
   mode:      $SERVICE_MODE
   discovery: $DISCOVERY_STATUS
-  tunnel:    $TUNNEL_STATUS
-  health:    http://$HOST:$PORT/health
-  MCP:       http://$HOST:$PORT/mcp
+  health:    http://$URL_HOST:$PORT/health
+  MCP:       http://$URL_HOST:$PORT/mcp
 DONE
+
+if [ "$WITH_TUNNEL" -eq 1 ]; then
+  echo "  tunnel:    $TUNNEL_STATUS"
+fi
 
 if [ "$WITH_TUNNEL" -eq 1 ] && [ "$SERVICE_MODE" = "none" ]; then
   echo "Tunnel config: $CONFIG_DIR/agent-webmcp-tunnel.env"
@@ -293,7 +298,6 @@ if [ "$SERVICE_MODE" = "user" ]; then
   cat <<'NOTICE'
 Note: the user-service install can read systemd state where the account is permitted, but system service
 start/stop/restart/reload usually requires PolicyKit/root authority. Use --system-service for the full
-system-service control path, while keeping Agent WebMCP bound to loopback and reaching ChatGPT through
-the dedicated OpenAI Secure MCP Tunnel companion.
+system-service control path and keep Agent WebMCP bound to a trusted local/private interface.
 NOTICE
 fi
