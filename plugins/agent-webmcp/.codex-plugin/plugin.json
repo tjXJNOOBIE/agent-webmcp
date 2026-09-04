@@ -1,0 +1,40 @@
+{
+  "name": "agent-webmcp",
+  "version": "0.2.0",
+  "description": "Operate local services through Agent WebMCP, including the shared Tavall Cloud tunnel federation used by this workspace.",
+  "author": {
+    "name": "tjXJNOOBIE",
+    "url": "https://github.com/tjXJNOOBIE"
+  },
+  "homepage": "https://github.com/tjXJNOOBIE/agent-webmcp",
+  "repository": "https://github.com/tjXJNOOBIE/agent-webmcp",
+  "keywords": [
+    "mcp",
+    "operations",
+    "systemd",
+    "services",
+    "logs",
+    "health",
+    "tavall-cloud"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Agent WebMCP",
+    "shortDescription": "Inspect and control local services through bounded MCP operations",
+    "longDescription": "Use Agent WebMCP to inspect system health and metrics, inspect managed services, read bounded logs, and perform service lifecycle actions. In the Tavall workspace, the skill uses Agent WebMCP tools federated through the already-connected Tavall Cloud app and Secure MCP Tunnel instead of creating a second tunnel.",
+    "developerName": "tjXJNOOBIE",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/tjXJNOOBIE/agent-webmcp",
+    "defaultPrompt": [
+      "Show the current Agent WebMCP system and service health.",
+      "Show the latest bounded logs for a managed service and explain any failures.",
+      "Restart a managed service and verify its observed state afterward."
+    ],
+    "screenshots": []
+  }
+}

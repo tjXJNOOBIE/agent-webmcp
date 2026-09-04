@@ -1,0 +1,37 @@
+import org.gradle.api.attributes.LibraryElements
+
+/*
+ * Tavall source dependencies are included as a Gradle composite. Force Java consumers in every
+ * participating build to use JAR variants rather than mutable build/classes directories. This
+ * gives inter-build dependencies a stable artifact boundary and keeps cold/sandboxed builds from
+ * depending on another included build's transient class-output directory.
+ */
+
+def applicationRoot = System.getenv('AGENT_WEBMCP_ROOT_PROJECT_DIR')
+def includedBuildRoot = System.getenv('AGENT_WEBMCP_GRADLE_INCLUDED_BUILD_ROOT')
+
+allprojects { project ->
+    if (applicationRoot && includedBuildRoot &&
+            project.rootProject.projectDir.canonicalPath != new File(applicationRoot).canonicalPath) {
+        def projectSegment = project.path == ':' ? 'root' : project.path.substring(1).replace(':', '/')
+        project.layout.buildDirectory.set(new File(includedBuildRoot, project.rootProject.name + '/' + projectSegment))
+    }
+}
+
+allprojects {
+    plugins.withType(JavaPlugin).configureEach {
+        configurations.matching {
+            it.name == 'compileClasspath' ||
+                    it.name == 'testCompileClasspath' ||
+                    it.name == 'runtimeClasspath' ||
+                    it.name == 'testRuntimeClasspath'
+        }.configureEach {
+            attributes {
+                attribute(
+                        LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE,
+                        objects.named(LibraryElements, LibraryElements.JAR)
+                )
+            }
+        }
+    }
+}

@@ -1,0 +1,16 @@
+.gradle/
+build/
+node_modules/
+e2e/.generated/
+test-results/
+playwright-report/
+.idea/
+*.iml
+
+.validation/
+.tavall-source-deps/
+.playwright-browsers/
+.npm-cache/
+.gradle-user-home/
+.gradle-project-cache/
+.gradle-included-builds/
