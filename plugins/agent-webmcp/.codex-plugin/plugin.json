@@ -1,0 +1,43 @@
+{
+  "name": "agent-webmcp",
+  "version": "0.3.1",
+  "description": "Operate Agent WebMCP's canonical service, agent, discovery, and durable-job workflows while preserving its bounded MCP and WebMCP authority surfaces.",
+  "author": {
+    "name": "tjXJNOOBIE",
+    "url": "https://github.com/tjXJNOOBIE"
+  },
+  "homepage": "https://github.com/tjXJNOOBIE/agent-webmcp",
+  "repository": "https://github.com/tjXJNOOBIE/agent-webmcp",
+  "keywords": [
+    "mcp",
+    "mcp-app",
+    "webmcp",
+    "operations",
+    "systemd",
+    "services",
+    "agents",
+    "jobs",
+    "discovery"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Agent WebMCP",
+    "shortDescription": "Operate bounded local services, agents, discovery, and durable jobs",
+    "longDescription": "Understand and use Agent WebMCP's 23-operation canonical runtime, its 18-tool browser-native WebMCP projection, and its intentionally narrower 16-tool remote MCP projection. The skill covers managed-service inspection and lifecycle, deterministic and optional Codex-assisted discovery, durable service jobs, runtime Agent Registry monitoring, and the Fleet Cockpit MCP App reached through a dedicated Agent WebMCP Secure MCP Tunnel.",
+    "developerName": "tjXJNOOBIE",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/tjXJNOOBIE/agent-webmcp",
+    "defaultPrompt": [
+      "Inspect the current Agent WebMCP system, agents, and managed-service health.",
+      "Discover operator services safely and explain which candidates were accepted or rejected.",
+      "Inspect durable Agent WebMCP jobs, their execution trace, logs, and agent attribution."
+    ],
+    "screenshots": []
+  },
+  "license": "MIT"
+}

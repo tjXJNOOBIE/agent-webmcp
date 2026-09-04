@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
+cd "$ROOT"
+export PLAYWRIGHT_BROWSERS_PATH="$ROOT/.playwright-browsers"
+export NPM_CONFIG_CACHE="$ROOT/.npm-cache"
+export AGENT_WEBMCP_GRADLE_RUN_ID="${AGENT_WEBMCP_GRADLE_RUN_ID:-ci-$$-${RANDOM:-0}}"
+cleanup_gradle_run() {
+  rm -rf "$ROOT/.gradle-included-builds/$AGENT_WEBMCP_GRADLE_RUN_ID" "$ROOT/.gradle-project-cache/$AGENT_WEBMCP_GRADLE_RUN_ID"
+}
+trap cleanup_gradle_run EXIT
+
+bash scripts/quality-preflight.sh --print
+bash scripts/ci/prepare-tavall-sources
+node --check src/main/resources/web/dashboard.js
+node --check src/main/resources/web/agent-webmcp-webmcp.js
+# One composite Gradle invocation owns the complete Java validation/build boundary. The full test
+# suite includes ArchitectureRulesTest; running a second composite build adds no coverage and can
+# race included-build output cleanup in parallel DEVELOPMENT validation sandboxes.
+bash scripts/gradle test installDist
+bash scripts/ci/verify-install-contract
+set +e
+sh scripts/install.sh --port 0 --no-service >/tmp/agent-webmcp-port-zero.out 2>&1
+port_zero_status=$?
+set -e
+if [ "$port_zero_status" -ne 2 ]; then
+  cat /tmp/agent-webmcp-port-zero.out >&2 || true
+  echo "installer must reject port 0 with usage/configuration status 2" >&2
+  exit 1
+fi
+rm -f /tmp/agent-webmcp-port-zero.out
+bash scripts/verify-codex-plugin.sh
+bash scripts/verify-openai-tunnel-client.sh
+npm ci
+npx playwright install chromium
+npm run e2e:bundle
+npx playwright test e2e/runtime.spec.js
+AGENT_WEBMCP_PANEL_FIXTURE=true AGENT_WEBMCP_SERVER_COMMAND="bash scripts/run-panel-fixture" npx playwright test e2e/panel.spec.js
+sh scripts/verify-webmcp-challenge.sh
+git diff --check

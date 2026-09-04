@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Agent WebMCP · Fleet Cockpit</title>
+  <link rel="stylesheet" href="/assets/agent-webmcp-dashboard.css">
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="#services" aria-label="Agent WebMCP Fleet Cockpit"><span class="brandmark">AW</span><strong>Agent WebMCP</strong></a>
+  <span class="top-separator"></span>
+  <button class="target-context" id="target-switch-button" type="button" aria-haspopup="dialog"><span class="dot warn" id="target-health-dot"></span><strong id="target-name">local</strong><span id="target-meta">loading target</span><span aria-hidden="true">⌄</span></button>
+  <div class="grow"></div>
+  <span class="status-pill" id="webmcp-status"><span class="dot warn"></span>WebMCP loading</span>
+  <button class="status-pill danger interactive" id="security-button" type="button"><span class="dot bad"></span>NO_AUTH</button>
+</header>
+<div class="cockpit">
+  <aside class="fleet-rail">
+    <button class="target-switch" id="rail-target-switch" type="button" aria-haspopup="dialog"><span class="target-code mono" id="target-code">LOC</span><span><strong id="rail-target-name">local</strong><small id="rail-target-health">loading services</small></span><span aria-hidden="true">⌄</span></button>
+    <div class="rail-group"><span class="rail-label">Workspace</span><nav id="primary-nav">
+      <button class="nav-row active" data-page="services" type="button"><span>Services</span><em id="service-count-nav">0</em></button>
+      <button class="nav-row" data-page="operations" type="button"><span>Operations</span><em id="operation-count-nav">0</em></button>
+      <button class="nav-row" data-page="activity" type="button"><span>Activity</span><em id="activity-count-nav">0</em></button>
+      <button class="nav-row" data-page="catalog" type="button"><span>Catalog</span><em id="catalog-count-nav">0</em></button>
+      <button class="nav-row" data-page="agents" type="button"><span>Agents</span><em id="agent-count-nav">0</em></button>
+      <button class="nav-row" data-page="jobs" type="button"><span>Jobs</span><em id="job-count-nav">0</em></button>
+      <button class="nav-row" data-page="settings" type="button"><span>Settings</span><em>›</em></button>
+    </nav></div>
+    <div class="browser-surface"><span class="rail-label">Browser surface</span><strong class="mono">document.modelContext</strong><small id="browser-surface-count">discovering projection</small></div>
+  </aside>
+  <main class="workspace" id="page-root" aria-live="polite"><div class="loading-state"><span class="spinner"></span><strong>Loading Fleet Cockpit</strong><small>Reading canonical runtime state.</small></div></main>
+  <aside class="context-rail" id="context-rail">
+    <section class="security-note"><strong><i class="dot bad"></i>NO_AUTH is active</strong><p>Reachability grants access to exposed operations. Keep this endpoint behind the trusted local or private tunnel boundary you control.</p></section>
+    <section class="context-block"><span class="rail-label">Runtime</span><div class="fact-list" id="runtime-facts"><div><span>Status</span><strong>Loading…</strong></div></div></section>
+    <section class="context-block"><span class="rail-label">Recent jobs</span><div class="mini-job-list" id="side-job-list"><div class="empty compact">No jobs loaded.</div></div></section>
+  </aside>
+</div>
+<div class="modal-backdrop" id="modal-backdrop" hidden><section class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"></section></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script src="/assets/agent-webmcp-dashboard.js"></script>
+<script src="/assets/agent-webmcp-webmcp.js"></script>
+</body>
+</html>
