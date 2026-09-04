@@ -64,11 +64,11 @@ The repository-owned `scripts/ci/run` path now prepares pinned Tavall source com
 
 ## Judge verification
 
-For normal local verification outside that sandbox-specific Gradle IPC limitation:
+For normal local verification through the repository-owned Gradle/Tavall composite wrapper:
 
 ```bash
-./gradlew test
-./gradlew e2e
+bash ./scripts/gradle test
+bash ./scripts/gradle e2e
 sh scripts/verify-webmcp-challenge.sh
 ```
 

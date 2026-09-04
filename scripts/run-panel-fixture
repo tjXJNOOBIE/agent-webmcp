@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+CLASSPATH_FILE="$ROOT/build/ci/panel-fixture-classpath.txt"
+
+if [[ ! -s "$CLASSPATH_FILE" ]]; then
+  echo "Panel fixture classpath is missing; run 'bash scripts/gradle writePanelFixtureClasspath' first." >&2
+  exit 1
+fi
+
+exec java -cp "$(cat "$CLASSPATH_FILE")" org.tavall.agentwebmcp.support.PanelFixtureApplication

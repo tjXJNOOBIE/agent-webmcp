@@ -43,7 +43,7 @@ done
 
 if [ "$SERVICE_MODE" = "system" ]; then
   if [ -z "$DIST" ]; then
-    echo "--system-service requires --dist. Build installDist as your normal user, then install that distribution with sudo." >&2
+    echo "--system-service requires --dist. Build installDist as your normal user with scripts/gradle, then install that distribution with sudo." >&2
     exit 1
   fi
   if [ "$(id -u)" -ne 0 ]; then
@@ -81,7 +81,7 @@ if [ -z "$DIST" ]; then
   if [ -f ./scripts/ci/prepare-tavall-sources ]; then
     bash ./scripts/ci/prepare-tavall-sources
   fi
-  ./gradlew --no-daemon installDist
+  bash ./scripts/gradle installDist
   DIST="build/install/agent-webmcp"
 fi
 

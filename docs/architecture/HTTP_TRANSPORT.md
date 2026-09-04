@@ -32,7 +32,9 @@ Browser / WebMCP / MCP / HTTP client
 - Tavall Registry owns the canonical operation registry.
 - Tavall Concurrency supplies HTTP dispatch and background operation execution.
 - Tavall Logging owns application/runtime logging.
-- Tavall Scheduler owns future and recurring durable-job timing; other Tavall tools are adopted only when Agent WebMCP actually owns those concerns.
+- Tavall Scheduler owns future and recurring durable-job timing.
+- Tavall Cache owns bounded, expiring session-oriented MCP transport state; session IDs have a 30-minute sliding TTL and a hard 1,024-session capacity.
+- Other Tavall tools are adopted only when Agent WebMCP actually owns those concerns.
 
 The HTTP transport must not introduce Spring, Netty, Jetty, Undertow, another DI container, or another executor framework merely to serve the current API. A richer server dependency is justified only by a concrete transport requirement the JDK server cannot responsibly satisfy, such as a future protocol/streaming need, and requires an explicit architecture change.
 
@@ -51,7 +53,7 @@ The health payload identifies `webServer=jdk-httpserver` and `transport=http-jso
 
 ## MCP transport
 
-`McpHttpHandler` translates MCP JSON-RPC into the canonical operation executor. It supports the deployed session-oriented MCP protocol versions used by tunnel clients and accepts the current stateless protocol header. Session IDs are opaque and transport-only; they do not become application authorization. `tools/list` and `tools/call` are constrained by `McpToolPolicy`.
+`McpHttpHandler` translates MCP JSON-RPC into the canonical operation executor. It supports the deployed session-oriented MCP protocol versions used by tunnel clients and accepts the current stateless protocol header. Session IDs are opaque and transport-only; they do not become application authorization. Session state is stored through Tavall Cache with a 30-minute sliding activity TTL and a hard 1,024-session bound so abandoned clients cannot grow transport memory without limit. `tools/list` and `tools/call` are constrained by `McpToolPolicy`.
 
 The MCP endpoint validates `Origin` when supplied, caps bodies at 1 MiB, returns JSON-RPC errors for protocol failures, and accepts notification requests without manufacturing responses. The normal ChatGPT path is OpenAI Secure MCP Tunnel targeting the private `http://127.0.0.1:7188/mcp` endpoint.
 

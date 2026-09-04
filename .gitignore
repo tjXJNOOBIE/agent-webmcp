@@ -11,3 +11,6 @@ playwright-report/
 .tavall-source-deps/
 .playwright-browsers/
 .npm-cache/
+.gradle-user-home/
+.gradle-project-cache/
+.gradle-included-builds/

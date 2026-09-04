@@ -21,7 +21,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Streamable HTTP MCP projection over the canonical Agent WebMCP operation runtime.
@@ -43,7 +42,7 @@ public final class McpHttpHandler implements HttpHandler, DependencyAccess<Agent
             "https://chat.openai.com"
     );
 
-    private final Map<String, String> sessions = new ConcurrentHashMap<>();
+    private final McpSessionCache sessions = new McpSessionCache();
 
     @Override
     public void handle(HttpExchange exchange) throws IOException {
@@ -119,7 +118,10 @@ public final class McpHttpHandler implements HttpHandler, DependencyAccess<Agent
                 : DEFAULT_PROTOCOL_VERSION;
 
         String sessionId = "mcp-" + UUID.randomUUID();
-        sessions.put(sessionId, negotiatedVersion);
+        if (!sessions.open(sessionId, negotiatedVersion)) {
+            writeJson(exchange, 503, rpcError(id, -32005, "MCP session capacity exceeded"));
+            return;
+        }
         exchange.getResponseHeaders().set("Mcp-Session-Id", sessionId);
         exchange.getResponseHeaders().set("Mcp-Protocol-Version", negotiatedVersion);
 
@@ -183,7 +185,7 @@ public final class McpHttpHandler implements HttpHandler, DependencyAccess<Agent
 
     private void terminateSession(HttpExchange exchange) throws IOException {
         String sessionId = exchange.getRequestHeaders().getFirst("Mcp-Session-Id");
-        if (sessionId == null || sessions.remove(sessionId) == null) {
+        if (!sessions.closeSession(sessionId)) {
             writeJson(exchange, 404, rpcError(null, -32001, "Unknown MCP session"));
             return;
         }
@@ -193,7 +195,7 @@ public final class McpHttpHandler implements HttpHandler, DependencyAccess<Agent
 
     private boolean validSession(HttpExchange exchange) {
         String sessionId = exchange.getRequestHeaders().getFirst("Mcp-Session-Id");
-        return sessionId != null && sessions.containsKey(sessionId);
+        return sessions.protocolVersion(sessionId) != null;
     }
 
     private String protocolVersion(HttpExchange exchange) {
@@ -202,7 +204,11 @@ public final class McpHttpHandler implements HttpHandler, DependencyAccess<Agent
             return header;
         }
         String sessionId = exchange.getRequestHeaders().getFirst("Mcp-Session-Id");
-        return sessionId == null ? DEFAULT_PROTOCOL_VERSION : sessions.getOrDefault(sessionId, DEFAULT_PROTOCOL_VERSION);
+        if (sessionId == null) {
+            return DEFAULT_PROTOCOL_VERSION;
+        }
+        String negotiated = sessions.protocolVersion(sessionId);
+        return negotiated == null ? DEFAULT_PROTOCOL_VERSION : negotiated;
     }
 
     private boolean originAllowed(HttpExchange exchange) {

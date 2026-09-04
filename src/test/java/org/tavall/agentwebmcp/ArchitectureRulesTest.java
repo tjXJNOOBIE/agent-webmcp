@@ -67,6 +67,8 @@ class ArchitectureRulesTest {
         String mcp = Files.readString(Path.of("src/main/java/org/tavall/agentwebmcp/mcp/McpHttpHandler.java"));
         assertTrue(mcp.contains("runtime().executor().execute"));
         assertFalse(mcp.contains("ProcessBuilder"));
+        assertTrue(mcp.contains("McpSessionCache"));
+        assertFalse(mcp.contains("ConcurrentHashMap"), "MCP session state must use Tavall Cache, not an unbounded local map");
         for (String framework : List.of("spring-boot", "netty", "jetty", "undertow")) {
             assertFalse(build.contains(framework), () -> "Unexpected web framework dependency: " + framework);
         }
@@ -82,6 +84,9 @@ class ArchitectureRulesTest {
             assertTrue(settings.contains(artifact), () -> "Missing source mapping for " + artifact);
             assertTrue(build.contains("org.tavall:" + artifact), () -> "Missing dependency on " + artifact);
         }
+        String sessionCache = Files.readString(Path.of("src/main/java/org/tavall/agentwebmcp/mcp/McpSessionCache.java"));
+        assertTrue(build.contains("org.tavall:abstract-cache-system"), "MCP session expiry must use Tavall Cache");
+        assertTrue(sessionCache.contains("extends AbstractCache"), "MCP session state must be owned by Tavall Cache");
         assertTrue(Files.exists(Path.of("scripts/ci/tavall-source-deps.tsv")));
         assertTrue(Files.exists(Path.of("scripts/ci/prepare-tavall-sources")));
     }

@@ -139,7 +139,7 @@ curl -fsS http://127.0.0.1:7188/health
 The user-service mode is suitable for health, metrics, catalog, jobs, and whatever systemd reads the account is allowed to perform. On a normal Linux host, system-level `start`/`stop`/`restart`/`reload` is usually denied by PolicyKit. For the **full system-service control path** on a dedicated operations machine, build as your normal user and then install the already-built distribution as a protected root system service:
 
 ```bash
-./gradlew --no-daemon installDist
+bash ./scripts/gradle installDist
 sudo ./scripts/install.sh \
   --dist "$PWD/build/install/agent-webmcp" \
   --system-service
@@ -331,14 +331,14 @@ Run the required quality preflight first:
 bash scripts/quality-preflight.sh --print
 ```
 
-Canonical Gradle validation is:
+Canonical Gradle validation uses the repository wrapper so Tavall composite dependencies resolve through stable JAR variants:
 
 ```bash
-./gradlew test
-./gradlew e2e
-./gradlew check
+bash ./scripts/gradle test
+bash ./scripts/gradle e2e
+bash ./scripts/gradle check
 ```
 
-The Tavall host-local validation sandbox currently has a known Gradle daemon loopback/IPC limitation, so repository work may also record direct Java 25 compilation against the real Tavall source dependencies plus JUnit/Playwright evidence when Gradle cannot reach its own single-use daemon. That infrastructure limitation must not be reported as a passing Gradle build.
+The repository wrapper isolates Gradle user/project caches and forces JAR variants across the pinned Tavall composite build. This keeps validation independent of warm included-build class directories and unrelated workspace cache locks.
 
 See `docs/architecture/OPERATION_SURFACE.md`, `docs/architecture/HTTP_TRANSPORT.md`, and `docs/backend/PORT_AND_E2E.md` for the owning runtime contracts.

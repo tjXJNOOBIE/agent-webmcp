@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+cd "$ROOT"
+
+export GRADLE_USER_HOME="${AGENT_WEBMCP_GRADLE_USER_HOME:-$ROOT/.gradle-user-home}"
+export AGENT_WEBMCP_ROOT_PROJECT_DIR="$ROOT"
+export AGENT_WEBMCP_GRADLE_INCLUDED_BUILD_ROOT="${AGENT_WEBMCP_GRADLE_INCLUDED_BUILD_ROOT:-$ROOT/.gradle-included-builds}"
+PROJECT_CACHE_DIR="${AGENT_WEBMCP_GRADLE_PROJECT_CACHE:-$ROOT/.gradle-project-cache}"
+
+exec ./gradlew \
+  --no-daemon \
+  --project-cache-dir "$PROJECT_CACHE_DIR" \
+  --init-script "$ROOT/scripts/ci/tavall-composite-jars.gradle" \
+  "$@"
