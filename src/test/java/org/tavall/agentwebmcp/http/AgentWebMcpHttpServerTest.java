@@ -14,6 +14,7 @@ import java.net.http.HttpResponse;
 import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AgentWebMcpHttpServerTest {
@@ -54,6 +55,40 @@ class AgentWebMcpHttpServerTest {
                     "{\"serviceId\":\"demo.service\",\"operationId\":\"system.status\",\"input\":{}}");
             assertEquals(400, disallowed.statusCode());
             assertTrue(disallowed.body().contains("JOB_OPERATION_NOT_ALLOWED"));
+        }
+    }
+
+    @Test
+    void noAuthRefusesNonLoopbackBinding() {
+        try (AgentWebMcpRuntime runtime = AgentWebMcpRuntime.builder().serviceProvider(new FakeServiceProvider())
+                .codexCliProvider(new FakeCodexCliProvider()).dataDirectory(dataDirectory).build()) {
+            IllegalArgumentException failure = assertThrows(IllegalArgumentException.class,
+                    () -> AgentWebMcpHttpServer.builder().host("0.0.0.0").port(0).build());
+            assertTrue(failure.getMessage().contains("NO_AUTH requires a loopback bind host"));
+        }
+    }
+
+    @Test
+    void mutationEndpointRejectsCrossOriginAndNonJsonBrowserRequests() throws Exception {
+        try (AgentWebMcpRuntime runtime = AgentWebMcpRuntime.builder().serviceProvider(new FakeServiceProvider())
+                .codexCliProvider(new FakeCodexCliProvider()).dataDirectory(dataDirectory).build();
+             AgentWebMcpHttpServer server = AgentWebMcpHttpServer.builder().port(0).build()) {
+            server.start();
+            HttpClient client = HttpClient.newHttpClient();
+            URI endpoint = URI.create("http://127.0.0.1:" + server.port() + "/api/v1/operations/system.status");
+
+            HttpResponse<String> crossOrigin = client.send(HttpRequest.newBuilder(endpoint)
+                    .header("Origin", "https://attacker.example")
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString("{}"))
+                    .build(), HttpResponse.BodyHandlers.ofString());
+            assertEquals(403, crossOrigin.statusCode());
+
+            HttpResponse<String> textPlain = client.send(HttpRequest.newBuilder(endpoint)
+                    .header("Content-Type", "text/plain")
+                    .POST(HttpRequest.BodyPublishers.ofString("{}"))
+                    .build(), HttpResponse.BodyHandlers.ofString());
+            assertEquals(415, textPlain.statusCode());
         }
     }
 
