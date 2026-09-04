@@ -8,6 +8,7 @@ import org.tavall.registry.AbstractRegistry;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -19,23 +20,34 @@ class ArchitectureRulesTest {
         try (var paths = Files.walk(Path.of("src/main/java"))) {
             for (Path path : paths.filter(Files::isRegularFile).filter(candidate -> candidate.toString().endsWith(".java")).toList()) {
                 String source = Files.readString(path);
-                assertFalse(path.getFileName().toString().contains("Manager"), () -> "Manager anti-pattern in " + path);
-                assertFalse(source.contains("Runtime.getRuntime().exec"), () -> "Raw runtime exec in " + path);
-                assertFalse(source.contains("new ProcessBuilder(\"sh\""), () -> "Shell trampoline in " + path);
-                assertFalse(source.contains("new ProcessBuilder(\"bash\""), () -> "Shell trampoline in " + path);
-                assertFalse(source.contains("java.util.concurrent.Executors"), () -> "Unmanaged executor import in " + path);
-                assertFalse(source.contains("Executors."), () -> "Unmanaged executor creation in " + path);
-                assertFalse(source.contains("Thread.ofVirtual()"), () -> "Feature-local virtual thread creation in " + path);
-                if (path.getFileName().toString().equals("LocalJobProvider.java")) {
-                    assertTrue(source.contains("AsyncTask.namingThreadFactory"),
-                            "durable jobs must obtain interruptible worker threads through Tavall Concurrency");
-                    assertTrue(source.contains("FutureTask<RunOutcome>"),
-                            "durable job timeout must retain interruptible Future cancellation semantics");
-                    assertTrue(source.contains("ICustomScheduler"),
-                            "durable future/recurring jobs must use Tavall Scheduler");
-                }
+                List<String> violations = sourcePolicyViolations(path, source);
+                assertTrue(violations.isEmpty(), () -> path + ": " + String.join(", ", violations));
             }
         }
+    }
+
+    @Test
+    void sourcePolicyFixturesProveRejectedAndAcceptedShapes() {
+        List<Fixture> invalid = List.of(
+                new Fixture(Path.of("ExampleManager.java"), "final class ExampleManager {}"),
+                new Fixture(Path.of("ExampleService.java"), "Runtime.getRuntime().exec(\"whoami\");"),
+                new Fixture(Path.of("ExampleService.java"), "new ProcessBuilder(\"sh\", \"-c\", \"echo bad\");"),
+                new Fixture(Path.of("ExampleService.java"), "new ProcessBuilder(\"bash\", \"-c\", \"echo bad\");"),
+                new Fixture(Path.of("ExampleService.java"), "import java.util.concurrent.Executors;"),
+                new Fixture(Path.of("ExampleService.java"), "Executors.newFixedThreadPool(4);"),
+                new Fixture(Path.of("ExampleService.java"), "Thread.ofVirtual().start(() -> {});")
+        );
+        invalid.forEach(fixture -> assertFalse(sourcePolicyViolations(fixture.path(), fixture.source()).isEmpty(),
+                () -> "fixture should violate source policy: " + fixture.source()));
+
+        assertTrue(sourcePolicyViolations(
+                Path.of("ExampleService.java"),
+                "final class ExampleService { void run() { AsyncTask.runAsync(() -> {}); } }"
+        ).isEmpty());
+
+        String validJobShape = "AsyncTask.namingThreadFactory FutureTask<RunOutcome> ICustomScheduler";
+        assertTrue(sourcePolicyViolations(Path.of("LocalJobProvider.java"), validJobShape).isEmpty());
+        assertFalse(sourcePolicyViolations(Path.of("LocalJobProvider.java"), "ICustomScheduler").isEmpty());
     }
 
     @Test
@@ -89,5 +101,25 @@ class ArchitectureRulesTest {
         assertTrue(sessionCache.contains("extends AbstractCache"), "MCP session state must be owned by Tavall Cache");
         assertTrue(Files.exists(Path.of("scripts/ci/tavall-source-deps.tsv")));
         assertTrue(Files.exists(Path.of("scripts/ci/prepare-tavall-sources")));
+    }
+
+    private static List<String> sourcePolicyViolations(Path path, String source) {
+        List<String> violations = new ArrayList<>();
+        if (path.getFileName().toString().contains("Manager")) violations.add("Manager anti-pattern");
+        if (source.contains("Runtime.getRuntime().exec")) violations.add("raw Runtime.exec");
+        if (source.contains("new ProcessBuilder(\"sh\"")) violations.add("sh shell trampoline");
+        if (source.contains("new ProcessBuilder(\"bash\"")) violations.add("bash shell trampoline");
+        if (source.contains("java.util.concurrent.Executors")) violations.add("unmanaged executor import");
+        if (source.contains("Executors.")) violations.add("unmanaged executor creation");
+        if (source.contains("Thread.ofVirtual()")) violations.add("feature-local virtual thread");
+        if (path.getFileName().toString().equals("LocalJobProvider.java")) {
+            if (!source.contains("AsyncTask.namingThreadFactory")) violations.add("job worker bypasses Tavall Concurrency");
+            if (!source.contains("FutureTask<RunOutcome>")) violations.add("job timeout lacks cancellable FutureTask");
+            if (!source.contains("ICustomScheduler")) violations.add("job scheduling bypasses Tavall Scheduler");
+        }
+        return List.copyOf(violations);
+    }
+
+    private record Fixture(Path path, String source) {
     }
 }
