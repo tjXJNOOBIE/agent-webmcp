@@ -322,7 +322,7 @@ Current ChatGPT custom-app setup scans the MCP server tools and creates a draft 
 5. Open **Settings / Workspace settings → Apps → Create**.
 6. Name the app **Agent WebMCP**.
 7. Choose **Tunnel** and select or paste the created `tunnel_...` ID.
-8. Use **No Auth** for the MCP target. The tunnel runtime key belongs only to the local `tunnel-client`; do not paste it into ChatGPT app fields.
+8. Use **No Auth** for the MCP target. **No Auth is the supported default for Agent WebMCP behind Secure MCP Tunnel.** Agent WebMCP does not expose an OAuth authorization server; the tunnel runtime key authenticates only the local `tunnel-client` to OpenAI and must never be pasted into ChatGPT app authentication fields.
 9. Click **Scan Tools**. The scan should discover exactly the 16 app-facing tools listed above.
 10. Click **Create**. The app should appear as a draft/development app.
 11. Start a new chat with Agent WebMCP selected and test a read-only call first, for example: `Show the current Agent WebMCP system status.`
@@ -363,13 +363,13 @@ plugins/agent-webmcp/
 .agents/plugins/marketplace.json
 ```
 
-The package follows the current OpenAI plugin repository shape with `.codex-plugin/plugin.json`, marketplace metadata, and a focused Agent WebMCP skill. It intentionally does **not** declare `.mcp.json`: current OpenAI behavior can mark imported plugins that declare MCP servers as Desktop only, which prevents the ChatGPT-web experience we want.
+The package follows the current OpenAI plugin repository shape with `.codex-plugin/plugin.json`, marketplace metadata, and a focused Agent WebMCP skill. It intentionally does **not** declare `.mcp.json`: current OpenAI behavior can mark imported plugins that declare MCP servers as Desktop only, which prevents the ChatGPT-web experience we want. Until a real workspace app ID exists, the package is intentionally **skill-only and independently installable**; app-backed tools are added only after `.app.json` can contain the real Agent WebMCP app ID.
 
 A ChatGPT plugin that wraps the **workspace custom app** needs the app ID assigned by ChatGPT after the draft app is created. That ID cannot be truthfully pre-generated in this repository. `plugins/agent-webmcp/app-binding.example.json` contains the exact binding shape. Once the app exists, copy it to `.app.json`, replace the placeholder with the real workspace app ID, and add `"apps": "./.app.json"` to the plugin manifest.
 
 ### Make the plugin clickable in a workspace
 
-After this repository branch is pushed to GitHub, a workspace admin can import the marketplace from **Workspace settings → Plugins → Add → Import marketplace**. Use `https://github.com/tjXJNOOBIE/agent-webmcp` as Source, leave Path empty because `.agents/plugins/marketplace.json` is at the repository root, and select the branch containing the plugin until it lands on `main`. After import, set the plugin installation policy to **Available** so eligible members see **Install plugin**. GitHub marketplace import is a workspace-admin feature and does not create or authorize the underlying custom app.
+A workspace admin can import the marketplace from **Workspace settings → Plugins → Add → Import marketplace**. Use `https://github.com/tjXJNOOBIE/agent-webmcp` as **Source**, leave **Path empty** because `.agents/plugins/marketplace.json` is at the repository root, and set **Branch** to `working/backend-operation-e2e-20260903` for the current PR #3 build (or the promoted staging branch once that merge is pushed). Do not put the branch into the Source URL. After import, open the imported plugin and set its workspace **Installation policy** to **Available** so eligible members see **Install plugin**. GitHub marketplace import and plugin installation are separate from creating/authorizing the underlying Agent WebMCP custom app.
 
 ```mermaid
 flowchart TD

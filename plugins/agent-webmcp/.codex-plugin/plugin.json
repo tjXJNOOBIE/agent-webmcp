@@ -1,6 +1,6 @@
 {
   "name": "agent-webmcp",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Operate Agent WebMCP's canonical service, agent, discovery, and durable-job workflows while preserving its bounded MCP and WebMCP authority surfaces.",
   "author": {
     "name": "tjXJNOOBIE",
@@ -38,5 +38,6 @@
       "Inspect durable Agent WebMCP jobs, their execution trace, logs, and agent attribution."
     ],
     "screenshots": []
-  }
+  },
+  "license": "MIT"
 }

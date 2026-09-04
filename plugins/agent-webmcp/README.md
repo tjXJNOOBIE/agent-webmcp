@@ -6,7 +6,7 @@ The plugin teaches Codex the differences among those surfaces, managed-service a
 
 ## Agent WebMCP app connection
 
-Use a dedicated Agent WebMCP Secure MCP Tunnel targeting the runtime's private loopback MCP endpoint, normally `http://127.0.0.1:7188/mcp`. The Agent WebMCP process remains loopback-only; the tunnel is the public transport boundary. Tavall Cloud remains the development/control environment and is not required to federate Agent WebMCP tools for this app.
+Use a dedicated Agent WebMCP Secure MCP Tunnel targeting the runtime's private loopback MCP endpoint, normally `http://127.0.0.1:7188/mcp`. The Agent WebMCP process remains loopback-only; the tunnel is the public transport boundary. The ChatGPT app must use **No Auth**, which is Agent WebMCP's supported default behind the tunnel. Tavall Cloud remains the development/control environment and is not required to federate Agent WebMCP tools for this app.
 
 After the custom Agent WebMCP app exists in the workspace:
 
@@ -17,9 +17,15 @@ After the custom Agent WebMCP app exists in the workspace:
 
 Do not commit another workspace's private app ID unless its portability is explicitly documented.
 
-## Codex marketplace installation
+## ChatGPT workspace marketplace installation
 
-The repository root contains `.agents/plugins/marketplace.json`. A local validation/install looks like:
+The repository root contains `.agents/plugins/marketplace.json`. Before the custom app exists, this package is intentionally skill-only and should still install normally. In **Workspace settings → Plugins → Add → Import marketplace**, use the repository URL as Source, leave Path empty, and select the branch separately. For the current pre-main build use `working/backend-operation-e2e-20260903`; after staging promotion, use the staging branch instead. Then set the imported plugin Installation policy to Available.
+
+The app binding is added only after ChatGPT successfully creates the No Auth Agent WebMCP app and provides its real workspace app ID.
+
+## Codex local validation
+
+A local validation/install looks like:
 
 ```bash
 codex plugin marketplace add /path/to/agent-webmcp
