@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="title desc">
+  <title id="title">One Catalog, Multiple Surfaces</title><desc id="desc">A canonical Java operation catalog projects the same typed operations to the web console, HTTP API, CLI, WebMCP, and bounded MCP endpoint.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#090d13"/><stop offset="1" stop-color="#111827"/></linearGradient>
+    <linearGradient id="core" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#083344"/><stop offset="1" stop-color="#2e1065"/></linearGradient>
+    <style>.t{font-family:Inter,Segoe UI,Arial,sans-serif;fill:#f8fafc}.m{fill:#94a3b8}.h{font-size:52px;font-weight:700}.s{font-size:24px}.k{font-size:27px;font-weight:650}.b{font-size:21px}.card{fill:#0f172a;stroke:#334155;stroke-width:2}.core{fill:url(#core);stroke:#67e8f9;stroke-width:2.5}.line{stroke:#67e8f9;stroke-width:4;fill:none;opacity:.9}.pill{fill:#131d2e;stroke:#334155;stroke-width:1.5}</style>
+    <marker id="a" markerWidth="11" markerHeight="11" refX="9" refY="5.5" orient="auto"><path d="M0 0L11 5.5L0 11Z" fill="#67e8f9"/></marker>
+  </defs>
+  <rect width="1600" height="900" rx="36" fill="url(#bg)"/>
+  <text x="90" y="105" class="t h">One Catalog, Multiple Surfaces</text>
+  <text x="90" y="148" class="t s m">The AI interface is a projection of the product, not a second product to maintain.</text>
+
+  <rect x="585" y="260" width="430" height="360" rx="36" class="core"/>
+  <text x="640" y="330" class="t k">Canonical Java Operation Catalog</text>
+  <text x="640" y="380" class="t b m">Operation ID</text><text x="855" y="380" class="t b">system.status</text>
+  <text x="640" y="420" class="t b m">Description</text><text x="855" y="420" class="t b">Human + agent readable</text>
+  <text x="640" y="460" class="t b m">Input schema</text><text x="855" y="460" class="t b">Generated from typed records</text>
+  <text x="640" y="500" class="t b m">Access</text><text x="855" y="500" class="t b">Read / mutation metadata</text>
+  <text x="640" y="540" class="t b m">Executor</text><text x="855" y="540" class="t b">One implementation</text>
+  <rect x="640" y="570" width="320" height="28" rx="14" fill="#67e8f9" opacity=".15"/><text x="700" y="592" class="t b">No duplicated AI tool logic</text>
+
+  <rect x="110" y="245" width="300" height="145" rx="26" class="card"/><text x="145" y="305" class="t k">Human web console</text><text x="145" y="345" class="t b m">Buttons, panels, state</text>
+  <rect x="110" y="500" width="300" height="145" rx="26" class="card"/><text x="145" y="560" class="t k">HTTP / JSON API</text><text x="145" y="600" class="t b m">Structured integrations</text>
+  <rect x="1190" y="245" width="300" height="145" rx="26" class="card"/><text x="1225" y="305" class="t k">Browser WebMCP</text><text x="1225" y="345" class="t b m">Page-native agent tools</text>
+  <rect x="1190" y="500" width="300" height="145" rx="26" class="card"/><text x="1225" y="560" class="t k">Bounded MCP</text><text x="1225" y="600" class="t b m">Smaller remote projection</text>
+  <rect x="650" y="705" width="300" height="120" rx="26" class="card"/><text x="760" y="760" class="t k">CLI</text><text x="715" y="795" class="t b m">Local operator surface</text>
+
+  <path d="M585 355 L410 320" class="line" marker-end="url(#a)"/><path d="M585 520 L410 570" class="line" marker-end="url(#a)"/>
+  <path d="M1015 355 L1190 320" class="line" marker-end="url(#a)"/><path d="M1015 520 L1190 570" class="line" marker-end="url(#a)"/>
+  <path d="M800 620 L800 705" class="line" marker-end="url(#a)"/>
+
+  <rect x="110" y="725" width="430" height="100" rx="22" class="pill"/><text x="140" y="767" class="t k">Same operation semantics</text><text x="140" y="800" class="t b m">A restart means the same thing everywhere.</text>
+  <rect x="1060" y="725" width="430" height="100" rx="22" class="pill"/><text x="1090" y="767" class="t k">Surface-specific exposure</text><text x="1090" y="800" class="t b m">Each interface can intentionally expose less.</text>
+</svg>
