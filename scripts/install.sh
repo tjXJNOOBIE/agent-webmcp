@@ -58,8 +58,8 @@ fi
 case "$PORT" in
   ''|*[!0-9]*) echo "port must be numeric" >&2; exit 2 ;;
 esac
-if [ "$PORT" -gt 65535 ]; then
-  echo "port must be <= 65535" >&2
+if [ "$PORT" -lt 1 ] || [ "$PORT" -gt 65535 ]; then
+  echo "port must be between 1 and 65535" >&2
   exit 2
 fi
 
@@ -91,6 +91,7 @@ if [ ! -x "$DIST/bin/agent-webmcp" ] || [ ! -d "$DIST/lib" ]; then
 fi
 
 mkdir -p "$PREFIX" "$CONFIG_DIR" "$STATE_DIR"
+chmod 700 "$STATE_DIR"
 rm -rf "$PREFIX/bin" "$PREFIX/lib"
 cp -R "$DIST/bin" "$DIST/lib" "$PREFIX/"
 chmod +x "$PREFIX/bin/agent-webmcp"
