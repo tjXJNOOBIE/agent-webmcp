@@ -352,7 +352,9 @@ flowchart TD
 
 ### Plan/workspace note
 
-OpenAI currently documents full custom MCP write/modify actions for Business and Enterprise/Edu workspaces. Pro can connect custom MCP with read/fetch permissions in developer mode. **Plus is not currently listed as supporting custom MCP developer-mode apps**, so this Plus account may not expose the Create/Developer Mode flow even though the local server and tunnel protocol are valid. A Business/Enterprise/Edu workspace is the supported path for testing `service.start/stop/restart/reload` from ChatGPT today.
+OpenAI currently documents full custom MCP write/modify actions for Business and Enterprise/Edu workspaces. Pro can connect custom MCP with read/fetch permissions in developer mode. **Plus is not currently listed as supporting custom MCP developer-mode apps**, so a personal Plus workspace may reject app creation even when the local server and Secure MCP Tunnel are healthy. A Business/Enterprise/Edu workspace is the supported path for testing `service.start/stop/restart/reload` from ChatGPT today.
+
+GitHub **plugin marketplace import is also a workspace-admin/owner workflow currently documented for Business and Enterprise/Edu workspaces**. The public Plugins Directory is visible more broadly, but that does not grant a personal Plus workspace the ability to import this repository as a custom GitHub marketplace. If Workspace settings does not expose **Plugins → Add → Import marketplace**, use a supported Business/Enterprise/Edu workspace for the ChatGPT plugin test; the same repository package remains usable as a local Codex plugin independently.
 
 ## Plugin package
 

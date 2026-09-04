@@ -23,6 +23,8 @@ The repository root contains `.agents/plugins/marketplace.json`. Before the cust
 
 The app binding is added only after ChatGPT successfully creates the No Auth Agent WebMCP app and provides its real workspace app ID.
 
+OpenAI currently exposes GitHub marketplace import as a Business/Enterprise/Edu workspace-admin/owner flow. Seeing the Plugins Directory on another plan does not imply that custom GitHub marketplace import is available there.
+
 ## Codex local validation
 
 A local validation/install looks like:
