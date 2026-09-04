@@ -3,6 +3,7 @@ package org.tavall.agentwebmcp.operation.schema;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.RecordComponent;
 import java.lang.reflect.Type;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -49,6 +50,9 @@ public final class RecordJsonSchema {
         Class<?> rawType = type instanceof Class<?> clazz ? clazz : Object.class;
         if (rawType == String.class) {
             return Map.of("type", "string");
+        }
+        if (rawType == Instant.class) {
+            return Map.of("type", "string", "format", "date-time");
         }
         if (rawType == int.class || rawType == Integer.class || rawType == long.class || rawType == Long.class) {
             return Map.of("type", "integer");
