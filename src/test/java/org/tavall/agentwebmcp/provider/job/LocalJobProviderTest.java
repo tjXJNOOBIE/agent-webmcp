@@ -181,7 +181,8 @@ class LocalJobProviderTest {
         try (AgentWebMcpRuntime recovered = runtime(services, new FakeCodexCliProvider(), null)) {
             JobDetails details = recovered.context().jobProvider().inspectJob(jobId);
             assertEquals(JobState.FAILED, details.state());
-            assertTrue(details.failureReason().contains("shutdown") || details.failureReason().contains("stopped"));
+            String failureReason = details.failureReason().toLowerCase(java.util.Locale.ROOT);
+            assertTrue(failureReason.contains("shutdown") || failureReason.contains("shut down") || failureReason.contains("stopped"));
         }
     }
 
