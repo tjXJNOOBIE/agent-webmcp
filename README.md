@@ -10,6 +10,8 @@ This repository contains a browser-native WebMCP implementation for the OpenAI W
 
 Submission/implementation evidence, dated commit provenance, and judge verification steps are documented in [`docs/hackathon/WEBMCP_CHALLENGE.md`](docs/hackathon/WEBMCP_CHALLENGE.md). The repository is released under the root [`LICENSE`](LICENSE).
 
+![Browser-Native WebMCP Registration](docs/hackathon/devpost/webmcp-registration-flow.svg)
+
 ## Current capabilities
 
 The canonical runtime owns **23 operations / 9 mutating**. WebMCP exposes an explicit **18-tool** browser projection, while the narrower ChatGPT/MCP app exposes **16 tools** for health/metrics, managed-service observability/lifecycle, diagnostics, and read-only job state.
@@ -35,52 +37,29 @@ The canonical runtime owns **23 operations / 9 mutating**. WebMCP exposes an exp
 
 The canonical catalog is intentionally larger than either machine-facing projection. WebMCP exposes 18 explicitly allowed operations, including read-only agent inventory/inspection. MCP is narrower at 16 tools: it includes `service.diagnostics`, service lifecycle/observability, system metrics/status, read-only runtime-agent state, and read-only durable job state, while keeping discovery, job execution/cancellation, target workflows, and managed-inventory mutation outside the remote app surface.
 
+![One Catalog, Multiple Surfaces](docs/hackathon/devpost/one-catalog-multiple-surfaces.svg)
+
 Managed-service enrollment remains the lifecycle authority boundary. `service.inspect`, `service.status`, `service.logs`, `service.diagnostics`, `service.start`, `service.stop`, `service.restart`, and `service.reload` reject unenrolled IDs with `SERVICE_NOT_MANAGED` before provider access. `service.discover` can register deterministic custom/operator candidates; optional Codex-assisted discovery is explicit, read-only, accepts only service IDs, and re-inspects every returned ID through the real provider.
 
 Jobs are service-bound. Deterministic jobs can run only `service.start`, `service.stop`, `service.restart`, or `service.reload`; one-shot AI jobs use the user's existing Codex CLI with a provider-owned service working directory. Recurring AI jobs are rejected. There is no generic shell tool, arbitrary browser-supplied working directory, or MCP filesystem/process escape hatch.
+
+![Bounded Safety Model](docs/hackathon/devpost/bounded-safety-model.svg)
+
+![Services and Durable Jobs](docs/hackathon/devpost/service-job-architecture.svg)
 
 `service.logs` is near-live through bounded repeated reads and cursors. It is not an unbounded interactive terminal stream.
 
 ### Fleet Cockpit interaction flow
 
-```mermaid
-flowchart TD
-    Add[Discover Services] --> AddOp[service.discover]
-    AddOp --> Validate[Provider metadata + deterministic policy; optional explicit AI re-inspection]
-    Validate --> Inventory[managed-services.txt]
-    Inventory --> List[service.list renders managed services]
-    List --> Select[Select service]
-    Select --> Lifecycle[start / stop / restart / reload]
-    Lifecycle --> Canonical[Canonical OperationExecutor]
-    Canonical --> Systemd[SystemdServiceProvider]
-    Systemd --> Observed[Observed service state returned to panel]
-    Select --> Logs[service.logs + cursor]
-    Logs --> Console[Bounded near-live journal console]
-    Select --> Remove[service.remove]
-    Remove --> Inventory
-    Remove --> Preserve[Systemd unit remains untouched]
-    Jobs[Create service-bound deterministic or one-shot Codex job] --> JobRepo[JobRepository]
-    JobRepo --> JobRead[job.list / inspect / logs]
-    JobRead --> PanelJobs[Panel + ChatGPT read-only job state]
-```
+![Human + Agent Operations Flow](docs/hackathon/devpost/human-agent-operations-flow.svg)
+
+![Human-Agent Collaboration Loop](docs/hackathon/devpost/human-agent-collaboration-loop.svg)
+
 
 ## Architecture
 
 The JDK server is intentionally only a transport edge. Tavall Java tools own application concerns.
 
-```mermaid
-flowchart LR
-    User[Operator / ChatGPT] --> Transport[JDK HttpServer]
-    Transport --> MCP[MCP / HTTP adapter]
-    MCP --> Executor[Canonical OperationExecutor]
-    Executor --> Catalog[Tavall Registry OperationCatalog]
-    Executor --> Providers[Service / Metrics / Target providers]
-    DI[Tavall DI] --> Executor
-    DI --> Providers
-    Concurrency[Tavall Concurrency] --> Transport
-    Concurrency --> Providers
-    Logging[Tavall Logging] --> Runtime[Agent WebMCP runtime]
-```
 
 The local HTTP endpoints are:
 
@@ -162,21 +141,6 @@ set +a
 
 You can override the install paths and bind address with `--prefix`, `--config-dir`, `--state-dir`, `--host`, and `--port`. Keep `127.0.0.1` unless you have an explicit private-network design. The intended ChatGPT path uses Secure MCP Tunnel instead of a public bind.
 
-### Application setup flow
-
-```mermaid
-flowchart TD
-    Clone[Clone Agent WebMCP] --> Build[Gradle installDist]
-    Build --> Mode{Install mode}
-    Mode -->|Read / user authority| User[Run scripts/install.sh]
-    Mode -->|Full system service control| System[sudo scripts/install.sh --dist ... --system-service]
-    User --> UserSvc[systemd user service]
-    System --> SystemSvc[protected system service]
-    UserSvc --> Health[GET 127.0.0.1:7188/health]
-    SystemSvc --> Health
-    Health --> MCPInit[POST initialize to 127.0.0.1:7188/mcp]
-    MCPInit --> Tools[tools/list returns 16 MCP tools]
-```
 
 ## Connect through OpenAI Secure MCP Tunnel
 
@@ -298,16 +262,6 @@ OpenAI's tunnel client exposes local health/readiness diagnostics when its healt
 
 Keep the tunnel companion healthy while ChatGPT is scanning or using the app.
 
-### Tunnel flow
-
-```mermaid
-flowchart LR
-    ChatGPT[ChatGPT] --> OpenAITunnel[OpenAI-hosted MCP tunnel endpoint]
-    TunnelClient[tunnel-client on your machine] ==>|Outbound HTTPS poll/response| OpenAITunnel
-    TunnelClient -->|Streamable HTTP| MCP[127.0.0.1:7188/mcp]
-    MCP --> Ops[Canonical Agent WebMCP operations]
-    Ops --> Systemd[systemd / journalctl]
-```
 
 No inbound public firewall rule is required for Agent WebMCP in this design.
 
@@ -337,18 +291,6 @@ If the tunnel exists in Platform but does not appear or scan in ChatGPT, check t
 4. `agent-webmcp-tunnel.service` is actually running;
 5. `tunnel-client doctor --explain` succeeds with the same runtime key used by the daemon.
 
-```mermaid
-flowchart TD
-    LocalHealth[Agent WebMCP healthy] --> TunnelReady[tunnel-client ready]
-    TunnelReady --> CreateApp[ChatGPT Apps → Create]
-    CreateApp --> TunnelMode[Connection: Tunnel + tunnel_id]
-    TunnelMode --> Scan[Scan Tools]
-    Scan --> SixteenTools[16 bounded operations discovered]
-    SixteenTools --> Draft[Create draft app]
-    Draft --> ReadTest[system.status / service.status / service.logs]
-    ReadTest --> WriteTest[service.restart on safe test service]
-    WriteTest --> Verify[service.status + service.logs verification]
-```
 
 ### Plan/workspace note
 
@@ -373,38 +315,6 @@ A ChatGPT plugin that wraps the **workspace custom app** needs the app ID assign
 
 A workspace admin can import the marketplace from **Workspace settings → Plugins → Add → Import marketplace**. Use `https://github.com/tjXJNOOBIE/agent-webmcp` as **Source**, leave **Path empty** because `.agents/plugins/marketplace.json` is at the repository root, and set **Branch** to `working/backend-operation-e2e-20260903` for the current PR #3 build (or the promoted staging branch once that merge is pushed). Do not put the branch into the Source URL. After import, open the imported plugin and set its workspace **Installation policy** to **Available** so eligible members see **Install plugin**. GitHub marketplace import and plugin installation are separate from creating/authorizing the underlying Agent WebMCP custom app.
 
-```mermaid
-flowchart TD
-    App[Create Agent WebMCP custom app through Tunnel] --> AppID[Copy workspace app ID]
-    AppID --> Binding[Create plugin .app.json binding]
-    Binding --> Push[Push GitHub marketplace]
-    Push --> Import[Workspace settings → Plugins → Import marketplace]
-    Import --> Available[Set installation policy: Available]
-    Available --> Click[Member clicks Install plugin]
-    Click --> Connect[Plugin uses the already-enabled Agent WebMCP app]
-```
-
-## New-user interaction flow
-
-This is the complete intended first-run path:
-
-```mermaid
-flowchart TD
-    A[New user clones repo] --> B[Install Java 25]
-    B --> C[Run scripts/install.sh]
-    C --> D[Agent WebMCP user service starts]
-    D --> E[verify-install.sh checks health + MCP initialize + tools/list]
-    E --> F[Create OpenAI tunnel + Restricted runtime key]
-    F --> G[Store key in protected local file]
-    G --> H[Install with --with-tunnel + tunnel ID + key file]
-    H --> I[agent-webmcp-tunnel.service]
-    I --> J[tunnel-client doctor succeeds]
-    J --> K[Create ChatGPT custom app in Tunnel mode]
-    K --> L[Scan 16 bounded MCP tools]
-    L --> M[Test read-only health/log operations]
-    M --> N[Test service lifecycle action on safe service]
-    N --> O[Verify observed service state/logs]
-```
 
 ## Development and validation
 
