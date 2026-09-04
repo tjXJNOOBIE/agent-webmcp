@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import org.tavall.agentwebmcp.AgentWebMcpRuntime;
+import org.tavall.agentwebmcp.http.HttpRequestSecurityPolicy;
 import org.tavall.agentwebmcp.operation.OperationAccess;
 import org.tavall.agentwebmcp.operation.OperationExecution;
 import org.tavall.agentwebmcp.operation.OperationExecutionStatus;
@@ -14,8 +15,6 @@ import org.tavall.agentwebmcp.operation.schema.RecordJsonSchema;
 import org.tavall.dependency.DependencyAccess;
 
 import java.io.IOException;
-import java.net.URI;
-import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -37,16 +36,12 @@ public final class McpHttpHandler implements HttpHandler, DependencyAccess<Agent
             "2025-11-25",
             "2026-07-28"
     );
-    private static final Set<String> DEFAULT_ALLOWED_ORIGINS = Set.of(
-            "https://chatgpt.com",
-            "https://chat.openai.com"
-    );
 
     private final McpSessionCache sessions = new McpSessionCache();
 
     @Override
     public void handle(HttpExchange exchange) throws IOException {
-        if (!originAllowed(exchange)) {
+        if (!HttpRequestSecurityPolicy.originAllowed(exchange)) {
             writeJson(exchange, 403, rpcError(null, -32000, "Origin is not allowed"));
             return;
         }
@@ -60,6 +55,11 @@ public final class McpHttpHandler implements HttpHandler, DependencyAccess<Agent
     }
 
     private void handlePost(HttpExchange exchange) throws IOException {
+        if (!HttpRequestSecurityPolicy.hasJsonContentType(exchange)) {
+            writeJson(exchange, 415, rpcError(null, -32600, "MCP POST requests require application/json"));
+            return;
+        }
+
         JsonNode request;
         try {
             request = readJson(exchange);
@@ -209,31 +209,6 @@ public final class McpHttpHandler implements HttpHandler, DependencyAccess<Agent
         }
         String negotiated = sessions.protocolVersion(sessionId);
         return negotiated == null ? DEFAULT_PROTOCOL_VERSION : negotiated;
-    }
-
-    private boolean originAllowed(HttpExchange exchange) {
-        String origin = exchange.getRequestHeaders().getFirst("Origin");
-        if (origin == null || origin.isBlank()) {
-            return true;
-        }
-        try {
-            URI uri = URI.create(origin);
-            String host = uri.getHost();
-            if ("127.0.0.1".equals(host) || "localhost".equalsIgnoreCase(host)) {
-                return true;
-            }
-        } catch (IllegalArgumentException ignored) {
-            return false;
-        }
-
-        String configured = System.getenv("AGENT_WEBMCP_ALLOWED_ORIGINS");
-        if (configured == null || configured.isBlank()) {
-            return DEFAULT_ALLOWED_ORIGINS.contains(origin);
-        }
-        return Arrays.stream(configured.split(","))
-                .map(String::trim)
-                .filter(value -> !value.isEmpty())
-                .anyMatch(origin::equals);
     }
 
     private JsonNode readJson(HttpExchange exchange) throws IOException {
