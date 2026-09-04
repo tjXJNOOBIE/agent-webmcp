@@ -30,10 +30,11 @@ public final class LocalTargetProvider implements TargetProvider {
     @Override
     public TargetDetails inspectTarget(String targetId) {
         requireLocal(targetId);
+        String hostname = hostname();
         return new TargetDetails(
                 LOCAL_TARGET_ID,
-                hostname(),
-                hostname(),
+                hostname,
+                hostname,
                 System.getProperty("os.name"),
                 System.getProperty("os.arch"),
                 System.getProperty("java.version"),
@@ -49,9 +50,13 @@ public final class LocalTargetProvider implements TargetProvider {
 
     private static String hostname() {
         try {
-            return InetAddress.getLocalHost().getHostName();
+            String hostname = InetAddress.getLocalHost().getHostName();
+            if (hostname == null || hostname.isBlank()) {
+                throw new ProviderException("TARGET_IDENTITY_UNAVAILABLE", "Local hostname is unavailable", 503);
+            }
+            return hostname;
         } catch (UnknownHostException exception) {
-            return "localhost";
+            throw new ProviderException("TARGET_IDENTITY_UNAVAILABLE", "Unable to resolve the local hostname", 503);
         }
     }
 }
