@@ -20,6 +20,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.FutureTask;
@@ -30,10 +31,13 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 @DelegatesTo(JobProvider.class)
 public final class LocalJobProvider implements JobProvider, IDependencyAccess {
+    private static final Duration SHUTDOWN_WAIT = Duration.ofSeconds(2);
+
     private final AtomicBoolean started = new AtomicBoolean();
     private final AtomicBoolean closed = new AtomicBoolean();
     private final Object stateLock = new Object();
     private final ConcurrentHashMap<String, ScheduledFuture<?>> scheduled = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, ActiveRun> activeRuns = new ConcurrentHashMap<>();
 
     @Override
     public String providerName() {
@@ -67,11 +71,20 @@ public final class LocalJobProvider implements JobProvider, IDependencyAccess {
         if (!closed.compareAndSet(false, true)) {
             return;
         }
+
+        List<ActiveRun> active;
         synchronized (stateLock) {
             for (ScheduledFuture<?> future : scheduled.values()) {
                 scheduler().cancelTask(future);
             }
             scheduled.clear();
+            active = List.copyOf(activeRuns.values());
+            active.forEach(ActiveRun::cancel);
+        }
+
+        long deadlineNanos = System.nanoTime() + SHUTDOWN_WAIT.toNanos();
+        for (ActiveRun run : active) {
+            run.awaitUntil(deadlineNanos);
         }
     }
 
@@ -127,6 +140,9 @@ public final class LocalJobProvider implements JobProvider, IDependencyAccess {
                 List.of(new JobLogEntry(now, "INFO", state == JobState.SCHEDULED ? "Scheduled job" : "Queued job"))
         );
         synchronized (stateLock) {
+            if (closed.get()) {
+                throw new ProviderException("JOB_PROVIDER_CLOSED", "Job provider is shutting down", 503);
+            }
             repository().write(job);
             scheduleLocked(job);
         }
@@ -191,6 +207,9 @@ public final class LocalJobProvider implements JobProvider, IDependencyAccess {
             if (future != null) {
                 scheduler().removeTask(future);
             }
+            if (closed.get()) {
+                return;
+            }
             JobRecord current = repository().read(jobId);
             if (current.state() != JobState.SCHEDULED && current.state() != JobState.QUEUED) {
                 return;
@@ -208,6 +227,16 @@ public final class LocalJobProvider implements JobProvider, IDependencyAccess {
             if (current.state() != JobState.RUNNING) {
                 return;
             }
+            if (closed.get()) {
+                Instant now = Instant.now();
+                repository().update(jobId, job -> copy(
+                        job, JobState.FAILED, job.startedAt(), now, outcome.execution(), outcome.output(),
+                        "Runtime shut down during job execution",
+                        new JobLogEntry(now, "ERROR", "Job interrupted by runtime shutdown"),
+                        job.nextRunAt()
+                ));
+                return;
+            }
             completeRunLocked(current, outcome);
         }
     }
@@ -215,14 +244,25 @@ public final class LocalJobProvider implements JobProvider, IDependencyAccess {
     private RunOutcome executeBounded(JobRecord running) {
         FutureTask<RunOutcome> future = new FutureTask<>(() -> invokeRun(running));
         Thread worker = AsyncTask.namingThreadFactory("agent-webmcp-job").newThread(future);
-        worker.start();
+        ActiveRun activeRun = new ActiveRun(future, worker);
+
+        synchronized (stateLock) {
+            if (closed.get()) {
+                return RunOutcome.failed("Runtime is shutting down");
+            }
+            activeRuns.put(running.id(), activeRun);
+            worker.start();
+        }
+
         try {
             return future.get(running.timeoutSeconds(), TimeUnit.SECONDS);
         } catch (TimeoutException exception) {
-            future.cancel(true);
+            activeRun.cancel();
             return RunOutcome.timedOut("Execution exceeded " + running.timeoutSeconds() + " second timeout");
+        } catch (CancellationException exception) {
+            return RunOutcome.failed("Job execution was cancelled during shutdown");
         } catch (InterruptedException exception) {
-            future.cancel(true);
+            activeRun.cancel();
             Thread.currentThread().interrupt();
             return RunOutcome.failed("Job execution was interrupted");
         } catch (ExecutionException exception) {
@@ -235,6 +275,8 @@ public final class LocalJobProvider implements JobProvider, IDependencyAccess {
             }
             String message = cause == null || cause.getMessage() == null ? "Job execution failed" : cause.getMessage();
             return RunOutcome.failed(message);
+        } finally {
+            activeRuns.remove(running.id(), activeRun);
         }
     }
 
@@ -369,6 +411,27 @@ public final class LocalJobProvider implements JobProvider, IDependencyAccess {
     private CodexCliProvider codex() { return getInstance(CodexCliProvider.class); }
     private ServiceProvider services() { return getInstance(ServiceProvider.class); }
     private OperationInvoker invoker() { return getInstance(OperationInvoker.class); }
+
+    private record ActiveRun(FutureTask<RunOutcome> future, Thread worker) {
+        private void cancel() {
+            future.cancel(true);
+            worker.interrupt();
+        }
+
+        private void awaitUntil(long deadlineNanos) {
+            long remaining = Math.max(0L, deadlineNanos - System.nanoTime());
+            if (remaining == 0L || !worker.isAlive()) {
+                return;
+            }
+            try {
+                long millis = TimeUnit.NANOSECONDS.toMillis(remaining);
+                int nanos = (int) (remaining - TimeUnit.MILLISECONDS.toNanos(millis));
+                worker.join(millis, nanos);
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+            }
+        }
+    }
 
     private record RunOutcome(
             boolean success,
