@@ -4,13 +4,27 @@ set -euo pipefail
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$ROOT"
 
+RUN_ID=${AGENT_WEBMCP_GRADLE_RUN_ID:-"gradle-$$-${RANDOM:-0}"}
+OWN_RUN_ID=false
+if [ -z "${AGENT_WEBMCP_GRADLE_RUN_ID:-}" ]; then
+  OWN_RUN_ID=true
+fi
+
 export GRADLE_USER_HOME="${AGENT_WEBMCP_GRADLE_USER_HOME:-$ROOT/.gradle-user-home}"
 export AGENT_WEBMCP_ROOT_PROJECT_DIR="$ROOT"
-export AGENT_WEBMCP_GRADLE_INCLUDED_BUILD_ROOT="${AGENT_WEBMCP_GRADLE_INCLUDED_BUILD_ROOT:-$ROOT/.gradle-included-builds}"
-PROJECT_CACHE_DIR="${AGENT_WEBMCP_GRADLE_PROJECT_CACHE:-$ROOT/.gradle-project-cache}"
+export AGENT_WEBMCP_GRADLE_INCLUDED_BUILD_ROOT="${AGENT_WEBMCP_GRADLE_INCLUDED_BUILD_ROOT:-$ROOT/.gradle-included-builds/$RUN_ID}"
+PROJECT_CACHE_DIR="${AGENT_WEBMCP_GRADLE_PROJECT_CACHE:-$ROOT/.gradle-project-cache/$RUN_ID}"
 
-exec ./gradlew \
+set +e
+./gradlew \
   --no-daemon \
   --project-cache-dir "$PROJECT_CACHE_DIR" \
   --init-script "$ROOT/scripts/ci/tavall-composite-jars.gradle" \
   "$@"
+status=$?
+set -e
+
+if [ "$OWN_RUN_ID" = true ]; then
+  rm -rf "$ROOT/.gradle-included-builds/$RUN_ID" "$ROOT/.gradle-project-cache/$RUN_ID"
+fi
+exit "$status"
